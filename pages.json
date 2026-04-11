@@ -1,0 +1,127 @@
+{
+	"pages": [
+		{
+			"path": "pages/index/index",
+			"style": {
+				"navigationBarTitleText": "车辆管理"
+			}
+		},
+		{
+			"path": "pages/index/add-car",
+			"style": {
+				"navigationBarTitleText": "添加车辆"
+			}
+		},
+		{
+			"path": "pages/index/edit-car",
+			"style": {
+				"navigationBarTitleText": "编辑车辆"
+			}
+		},
+		{
+			"path": "pages/insurance/insurance",
+			"style": {
+				"navigationBarTitleText": "保险管理"
+			}
+		},
+		{
+			"path": "pages/insurance/add-insurance",
+			"style": {
+				"navigationBarTitleText": "添加保险"
+			}
+		},
+		{
+			"path": "pages/insurance/edit-insurance",
+			"style": {
+				"navigationBarTitleText": "编辑保险"
+			}
+		},
+		{
+			"path": "pages/maintenance/maintenance",
+			"style": {
+				"navigationBarTitleText": "保养管理"
+			}
+		},
+		{
+			"path": "pages/maintenance/add-maintenance",
+			"style": {
+				"navigationBarTitleText": "添加保养记录"
+			}
+		},
+		{
+			"path": "pages/maintenance/edit-maintenance",
+			"style": {
+				"navigationBarTitleText": "编辑保养记录"
+			}
+		},
+		{
+			"path": "pages/rental/rental",
+			"style": {
+				"navigationBarTitleText": "租赁管理"
+			}
+		},
+		{
+			"path": "pages/rental/add-rental",
+			"style": {
+				"navigationBarTitleText": "添加租赁记录"
+			}
+		},
+		{
+			"path": "pages/rental/edit-rental",
+			"style": {
+				"navigationBarTitleText": "编辑租赁记录"
+			}
+		},
+		{
+			"path": "pages/statistics/statistics",
+			"style": {
+				"navigationBarTitleText": "统计报表"
+			}
+		}
+	],
+	"globalStyle": {
+		"navigationBarTextStyle": "black",
+		"navigationBarTitleText": "车辆管理系统",
+		"navigationBarBackgroundColor": "#F8F8F8",
+		"backgroundColor": "#F8F8F8"
+	},
+	"tabBar": {
+		"color": "#999",
+		"selectedColor": "#007AFF",
+		"borderStyle": "black",
+		"backgroundColor": "#fff",
+		"list": [
+			{
+				"pagePath": "pages/index/index",
+				"text": "车辆管理",
+				"iconPath": "static/logo.png",
+				"selectedIconPath": "static/logo.png"
+			},
+			{
+				"pagePath": "pages/rental/rental",
+				"text": "租赁管理",
+				"iconPath": "static/logo.png",
+				"selectedIconPath": "static/logo.png"
+			},
+			{
+				"pagePath": "pages/insurance/insurance",
+				"text": "保险管理",
+				"iconPath": "static/logo.png",
+				"selectedIconPath": "static/logo.png"
+			},
+			{
+				"pagePath": "pages/maintenance/maintenance",
+				"text": "保养管理",
+				"iconPath": "static/logo.png",
+				"selectedIconPath": "static/logo.png"
+			},
+			
+			{
+				"pagePath": "pages/statistics/statistics",
+				"text": "统计报表",
+				"iconPath": "static/logo.png",
+				"selectedIconPath": "static/logo.png"
+			}
+		]
+	}
+}
