@@ -409,24 +409,48 @@ function queryIndexedDb(sql, params) {
 				const whereMatch = sql.match(/WHERE\s+([^;]+)/i);
 				if (whereMatch) {
 					const whereClause = whereMatch[1];
-					// 简化处理，假设WHERE子句是id = ?
+					// 处理id = ? 或 carId = ? 的情况
 					if (whereClause.includes('id = ?') && params.length > 0) {
 						const id = params[0];
 						result = result.filter(item => item.id == id);
+					} else if (whereClause.includes('carId = ?') && params.length > 0) {
+						const carId = params[0];
+						result = result.filter(item => item.carId == carId);
 					}
 				}
 
-				// 处理ORDER BY子句11
+				// 处理ORDER BY子句
 				const orderMatch = sql.match(/order by\s+([^;]+)/i);
 				if (orderMatch) {
 					const orderClause = orderMatch[1].trim();
 					if (orderClause.includes('desc')) {
 						const field = orderClause.replace('desc', '').trim();
-						result.sort((a, b) => b[field] - a[field]);
+						// 处理字符串类型的排序
+						result.sort((a, b) => {
+							if (typeof a[field] === 'string' && typeof b[field] === 'string') {
+								return b[field].localeCompare(a[field]);
+							} else {
+								return b[field] - a[field];
+							}
+						});
 					} else if (orderClause.includes('asc')) {
 						const field = orderClause.replace('asc', '').trim();
-						result.sort((a, b) => a[field] - b[field]);
+						// 处理字符串类型的排序
+						result.sort((a, b) => {
+							if (typeof a[field] === 'string' && typeof b[field] === 'string') {
+								return a[field].localeCompare(b[field]);
+							} else {
+								return a[field] - b[field];
+							}
+						});
 					}
+				}
+
+				// 处理LIMIT子句
+				const limitMatch = sql.match(/limit\s+(\d+)/i);
+				if (limitMatch) {
+					const limit = parseInt(limitMatch[1]);
+					result = result.slice(0, limit);
 				}
 
 				// 模拟SQL查询结果格式

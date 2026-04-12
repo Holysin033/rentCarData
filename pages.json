@@ -86,41 +86,44 @@
 		"backgroundColor": "#F8F8F8"
 	},
 	"tabBar": {
-		"color": "#999",
-		"selectedColor": "#007AFF",
+		"color": "#757575",
+		"fontSize": "13px",
+		"iconWidth": "28px",
+		"spacing": "-1px",
+		"selectedColor": "#005500",
 		"borderStyle": "black",
-		"backgroundColor": "#fff",
+		"backgroundColor": "#f1f6f9",
 		"list": [
 			{
 				"pagePath": "pages/index/index",
 				"text": "车辆管理",
-				"iconPath": "static/logo.png",
-				"selectedIconPath": "static/logo.png"
+				"iconPath": "static/tabbar/car.png",
+				"selectedIconPath": "static/tabbar/car_selected.png"
 			},
 			{
 				"pagePath": "pages/rental/rental",
 				"text": "租赁管理",
-				"iconPath": "static/logo.png",
-				"selectedIconPath": "static/logo.png"
+				"iconPath": "/static/tabbar/rent.png",
+				"selectedIconPath": "static/tabbar/rent_selected.png"
 			},
 			{
 				"pagePath": "pages/insurance/insurance",
 				"text": "保险管理",
-				"iconPath": "static/logo.png",
-				"selectedIconPath": "static/logo.png"
+				"iconPath": "/static/tabbar/insurance.png",
+				"selectedIconPath": "/static/tabbar/insurance_selected.png"
 			},
 			{
 				"pagePath": "pages/maintenance/maintenance",
 				"text": "保养管理",
-				"iconPath": "static/logo.png",
-				"selectedIconPath": "static/logo.png"
+				"iconPath": "/static/tabbar/mt.png",
+				"selectedIconPath": "static/tabbar/mt_selected.png"
 			},
 			
 			{
 				"pagePath": "pages/statistics/statistics",
 				"text": "统计报表",
-				"iconPath": "static/logo.png",
-				"selectedIconPath": "static/logo.png"
+				"iconPath": "static/tabbar/st.png",
+				"selectedIconPath": "static/tabbar/st_selected.png"
 			}
 		]
 	}

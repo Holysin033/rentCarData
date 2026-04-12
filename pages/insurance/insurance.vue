@@ -10,7 +10,7 @@
 		<view class="insurance-list">
 			<view v-for="item in filteredInsuranceList" :key="item.id" class="insurance-item">
 				<view class="item-content">
-					<text class="car-number">{{ item.carNumber }}</text>
+					<text class="car-number">{{ item.carName }}</text>
 					<text class="insurance-company">{{ item.company }}</text>
 					<text class="expire-date">到期日期：{{ item.expireDate }}</text>
 					<text class="premium">保费：{{ item.premium }}元</text>
@@ -47,7 +47,7 @@ export default {
 			}
 			const keyword = this.searchKeyword.toLowerCase();
 			return this.insuranceList.filter(item =>
-				item.carNumber.toLowerCase().includes(keyword)
+				item.carName.toLowerCase().includes(keyword)
 			);
 		}
 	},
@@ -65,14 +65,14 @@ export default {
 					this.insuranceList = [
 						{
 							id: 1,
-							carNumber: '京A12345',
+							carName: '丰田凯美瑞',
 							company: '平安保险',
 							expireDate: '2026-12-31',
 							premium: 5000
 						},
 						{
 							id: 2,
-							carNumber: '京B67890',
+							carName: '本田雅阁',
 							company: '人保财险',
 							expireDate: '2026-10-15',
 							premium: 4500
@@ -85,14 +85,14 @@ export default {
 				this.insuranceList = [
 					{
 						id: 1,
-						carNumber: '京A12345',
+						carName: '丰田凯美瑞',
 						company: '平安保险',
 						expireDate: '2026-12-31',
 						premium: 5000
 					},
 					{
 						id: 2,
-						carNumber: '京B67890',
+						carName: '本田雅阁',
 						company: '人保财险',
 						expireDate: '2026-10-15',
 						premium: 4500
@@ -170,14 +170,22 @@ export default {
 <style scoped>
 .container {
 	padding: 20rpx;
+	padding-top: 100rpx;
 }
 
 .header {
+	position: fixed;
+	top: 0;
+	left: 0;
+	right: 0;
 	display: flex;
 	justify-content: space-between;
 	align-items: center;
-	margin-bottom: 20rpx;
+	padding: 20rpx;
+	background-color: #f8f8f8;
+	z-index: 999;
 	gap: 10rpx;
+	box-shadow: 0 2rpx 4rpx rgba(0, 0, 0, 0.1);
 }
 
 .search-box {

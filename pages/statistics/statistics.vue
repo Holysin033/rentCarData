@@ -152,13 +152,21 @@ export default {
 <style scoped>
 .container {
 	padding: 20rpx;
+	padding-top: 100rpx;
 }
 
 .header {
+	position: fixed;
+	top: 0;
+	left: 0;
+	right: 0;
 	display: flex;
 	justify-content: space-between;
 	align-items: center;
-	margin-bottom: 20rpx;
+	padding: 20rpx;
+	background-color: #f8f8f8;
+	z-index: 999;
+	box-shadow: 0 2rpx 4rpx rgba(0,0,0,0.1);
 }
 
 .title {

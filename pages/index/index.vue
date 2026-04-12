@@ -13,6 +13,8 @@
 					<text class="car-name">{{ item.name }}</text>
 					<text class="car-number">车牌号：{{ item.carNumber || '未填写' }}</text>
 					<text class="image-path" v-if="item.imagePath">照片路径：{{ item.imagePath }}</text>
+					<text class="maintenance-date">最新保养：{{ item.latestMaintenance || '无' }}</text>
+					<text class="insurance-date">最新保险：{{ item.latestInsurance || '无' }}</text>
 				</view>
 				<view class="item-actions">
 					<button @click="editCar(item)" class="edit-btn">编辑</button>
@@ -57,6 +59,29 @@ export default {
 			const sql = `SELECT * FROM car ORDER BY id DESC`;
 			query(sql).then(res => {
 				this.carList = res || [];
+
+				// 为每个车辆添加最新的保养时间和保险时间
+				this.carList.forEach(car => {
+					// 初始化默认值
+					car.latestMaintenance = '无';
+					car.latestInsurance = '无';
+
+					// 查询最新保养记录
+					query(`SELECT maintenanceDate FROM maintenance WHERE carId = ? ORDER BY maintenanceDate DESC LIMIT 1`, [car.id]).then(maintenanceRes => {
+						console.log('保养查询结果 for car ' + car.id + ':', maintenanceRes);
+						if (maintenanceRes && maintenanceRes.length > 0) {
+							car.latestMaintenance = maintenanceRes[0].maintenanceDate;
+						}
+					});
+
+					// 查询最新保险记录
+					query(`SELECT expireDate FROM insurance WHERE carId = ? ORDER BY expireDate DESC LIMIT 1`, [car.id]).then(insuranceRes => {
+						console.log('保险查询结果 for car ' + car.id + ':', insuranceRes);
+						if (insuranceRes && insuranceRes.length > 0) {
+							car.latestInsurance = insuranceRes[0].expireDate;
+						}
+					});
+				});
 				// 如果数据库中没有数据，使用模拟数据
 				if (this.carList.length === 0) {
 					this.carList = [
@@ -64,13 +89,17 @@ export default {
 							id: 1,
 							name: '大众朗逸',
 							carNumber: '京A12345',
-							imagePath: ''
+							imagePath: '',
+							latestMaintenance: '2026-03-15',
+							latestInsurance: '2026-12-31'
 						},
 						{
 							id: 2,
 							name: '丰田凯美瑞',
 							carNumber: '京B67890',
-							imagePath: ''
+							imagePath: '',
+							latestMaintenance: '2026-02-20',
+							latestInsurance: '2026-11-30'
 						}
 					];
 				}
@@ -82,13 +111,17 @@ export default {
 						id: 1,
 						name: '大众朗逸',
 						carNumber: '京A12345',
-						imagePath: ''
+						imagePath: '',
+						latestMaintenance: '2026-03-15',
+						latestInsurance: '2026-12-31'
 					},
 					{
 						id: 2,
 						name: '丰田凯美瑞',
 						carNumber: '京B67890',
-						imagePath: ''
+						imagePath: '',
+						latestMaintenance: '2026-02-20',
+						latestInsurance: '2026-11-30'
 					}
 				];
 			});
@@ -143,14 +176,22 @@ export default {
 <style scoped>
 .container {
 	padding: 20rpx;
+	padding-top: 100rpx;
 }
 
 .header {
+	position: fixed;
+	top: 0;
+	left: 0;
+	right: 0;
 	display: flex;
 	justify-content: space-between;
 	align-items: center;
-	margin-bottom: 20rpx;
+	padding: 20rpx;
+	background-color: #f8f8f8;
+	z-index: 999;
 	gap: 10rpx;
+	box-shadow: 0 2rpx 4rpx rgba(0, 0, 0, 0.1);
 }
 
 .search-box {
@@ -213,6 +254,20 @@ export default {
 }
 
 .image-path {
+	display: block;
+	font-size: 24rpx;
+	color: #666;
+	margin-bottom: 8rpx;
+}
+
+.maintenance-date {
+	display: block;
+	font-size: 24rpx;
+	color: #666;
+	margin-bottom: 8rpx;
+}
+
+.insurance-date {
 	display: block;
 	font-size: 24rpx;
 	color: #666;

@@ -10,7 +10,7 @@
 		<view class="maintenance-list">
 			<view v-for="item in filteredMaintenanceList" :key="item.id" class="maintenance-item">
 				<view class="item-content">
-					<text class="car-number">{{ item.carNumber }}</text>
+					<text class="car-number">{{ item.carName }}</text>
 					<text class="maintenance-date">保养日期：{{ item.maintenanceDate }}</text>
 					<text class="mileage">保养里程：{{ item.mileage }}公里</text>
 					<text class="cost">费用：{{ item.cost }}元</text>
@@ -48,7 +48,7 @@ export default {
 			}
 			const keyword = this.searchKeyword.toLowerCase();
 			return this.maintenanceList.filter(item =>
-				item.carNumber.toLowerCase().includes(keyword)
+				item.carName.toLowerCase().includes(keyword)
 			);
 		}
 	},
@@ -64,7 +64,7 @@ export default {
 					this.maintenanceList = [
 						{
 							id: 1,
-							carNumber: '京A12345',
+							carName: '丰田凯美瑞',
 							maintenanceDate: '2026-03-15',
 							mileage: 10000,
 							cost: 800,
@@ -72,7 +72,7 @@ export default {
 						},
 						{
 							id: 2,
-							carNumber: '京B67890',
+							carName: '本田雅阁',
 							maintenanceDate: '2026-02-20',
 							mileage: 15000,
 							cost: 1200,
@@ -86,7 +86,7 @@ export default {
 				this.maintenanceList = [
 					{
 						id: 1,
-						carNumber: '京A12345',
+						carName: '丰田凯美瑞',
 						maintenanceDate: '2026-03-15',
 						mileage: 10000,
 						cost: 800,
@@ -94,7 +94,7 @@ export default {
 					},
 					{
 						id: 2,
-						carNumber: '京B67890',
+						carName: '本田雅阁',
 						maintenanceDate: '2026-02-20',
 						mileage: 15000,
 						cost: 1200,
@@ -153,14 +153,22 @@ export default {
 <style scoped>
 .container {
 	padding: 20rpx;
+	padding-top: 100rpx;
 }
 
 .header {
+	position: fixed;
+	top: 0;
+	left: 0;
+	right: 0;
 	display: flex;
 	justify-content: space-between;
 	align-items: center;
-	margin-bottom: 20rpx;
+	padding: 20rpx;
+	background-color: #f8f8f8;
+	z-index: 999;
 	gap: 10rpx;
+	box-shadow: 0 2rpx 4rpx rgba(0, 0, 0, 0.1);
 }
 
 .search-box {
