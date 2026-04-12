@@ -40,14 +40,44 @@ if (uni.restoreGlobal) {
   }
   const dbName = "car_management";
   let db = null;
-  let isBrowser = typeof plus === "undefined";
   let indexedDb = null;
+  function hasPlusSqlite() {
+    return typeof plus !== "undefined" && plus.sqlite && typeof plus.sqlite.openDatabase === "function" && typeof plus.sqlite.executeSql === "function" && typeof plus.sqlite.selectSql === "function";
+  }
+  function useIndexedDbStorage() {
+    return !hasPlusSqlite();
+  }
+  function bindPlusSqlParams(sql, params) {
+    if (!params || params.length === 0) {
+      return sql;
+    }
+    let i = 0;
+    return sql.replace(/\?/g, () => {
+      const v = params[i++];
+      if (v === null || v === void 0) {
+        return "NULL";
+      }
+      if (typeof v === "number" && Number.isFinite(v)) {
+        return String(v);
+      }
+      return "'" + String(v).replace(/'/g, "''") + "'";
+    });
+  }
   function initDb() {
     return new Promise((resolve, reject) => {
-      if (isBrowser) {
-        initIndexedDB().then(resolve).catch(reject);
+      const runInit = () => {
+        if (hasPlusSqlite()) {
+          initPlusSqlite().then(resolve).catch(reject);
+        } else {
+          initIndexedDB().then(resolve).catch(reject);
+        }
+      };
+      if (typeof plus !== "undefined") {
+        runInit();
+      } else if (typeof document !== "undefined") {
+        document.addEventListener("plusready", runInit, { once: true });
       } else {
-        initIndexedDB().then(resolve).catch(reject);
+        runInit();
       }
     });
   }
@@ -82,23 +112,156 @@ if (uni.restoreGlobal) {
       };
     });
   }
+  function initPlusSqlite() {
+    return new Promise((resolve, reject) => {
+      plus.sqlite.openDatabase({
+        name: dbName,
+        path: "_doc/" + dbName + ".db",
+        success: function() {
+          db = dbName;
+          createTables().then(resolve).catch(reject);
+        },
+        fail: function(e) {
+          reject(e);
+        }
+      });
+    });
+  }
+  function createTables() {
+    return new Promise((resolve, reject) => {
+      const createCarTable = `
+			CREATE TABLE IF NOT EXISTS car (
+				id INTEGER PRIMARY KEY AUTOINCREMENT,
+				name TEXT NOT NULL,
+				carNumber TEXT,
+				imagePath TEXT,
+				createdAt TEXT
+			);
+		`;
+      const createInsuranceTable = `
+			CREATE TABLE IF NOT EXISTS insurance (
+				id INTEGER PRIMARY KEY AUTOINCREMENT,
+				carId INTEGER,
+				carNumber TEXT,
+				carName TEXT,
+				company TEXT,
+				expireDate TEXT,
+				premium REAL,
+				createdAt TEXT,
+				FOREIGN KEY (carId) REFERENCES car(id)
+			);
+		`;
+      const createMaintenanceTable = `
+			CREATE TABLE IF NOT EXISTS maintenance (
+				id INTEGER PRIMARY KEY AUTOINCREMENT,
+				carId INTEGER,
+				carNumber TEXT,
+				carName TEXT,
+				maintenanceDate TEXT,
+				mileage INTEGER,
+				cost REAL,
+				items TEXT,
+				createdAt TEXT,
+				FOREIGN KEY (carId) REFERENCES car(id)
+			);
+		`;
+      const createRentalTable = `
+			CREATE TABLE IF NOT EXISTS rental (
+				id INTEGER PRIMARY KEY AUTOINCREMENT,
+				carId INTEGER,
+				carName TEXT,
+				startDate TEXT,
+				endDate TEXT,
+				days INTEGER,
+				dailyRate REAL,
+				initialTotalAmount REAL,
+				changeAmount REAL,
+				changeAction TEXT,
+				changedTotalAmount REAL,
+				renterName TEXT,
+				renterPhone TEXT,
+				status TEXT,
+				createdAt TEXT,
+				updatedAt TEXT,
+				FOREIGN KEY (carId) REFERENCES car(id)
+			);
+		`;
+      const createStatisticsTable = `
+			CREATE TABLE IF NOT EXISTS statistics_config (
+				id INTEGER PRIMARY KEY AUTOINCREMENT,
+				key TEXT UNIQUE,
+				value TEXT,
+				updatedAt TEXT
+			);
+		`;
+      const statements = [
+        createCarTable,
+        createInsuranceTable,
+        createMaintenanceTable,
+        createRentalTable,
+        createStatisticsTable
+      ];
+      const runNext = (index) => {
+        if (index >= statements.length) {
+          migratePlusSqliteLegacyColumns().then(resolve).catch(reject);
+          return;
+        }
+        plus.sqlite.executeSql({
+          name: dbName,
+          sql: statements[index],
+          success: function() {
+            runNext(index + 1);
+          },
+          fail: function(e) {
+            reject(e);
+          }
+        });
+      };
+      runNext(0);
+    });
+  }
+  function migratePlusSqliteLegacyColumns() {
+    return new Promise((resolve) => {
+      const alters = [
+        "ALTER TABLE insurance ADD COLUMN carName TEXT",
+        "ALTER TABLE maintenance ADD COLUMN carName TEXT"
+      ];
+      const runNext = (i) => {
+        if (i >= alters.length) {
+          resolve();
+          return;
+        }
+        plus.sqlite.executeSql({
+          name: dbName,
+          sql: alters[i],
+          success: function() {
+            runNext(i + 1);
+          },
+          fail: function() {
+            runNext(i + 1);
+          }
+        });
+      };
+      runNext(0);
+    });
+  }
   function executeSql(sql, params = []) {
     return new Promise((resolve, reject) => {
       if (!db) {
         reject("数据库未初始化");
         return;
       }
-      if (isBrowser) {
+      if (useIndexedDbStorage()) {
         executeIndexedDb(sql, params).then(resolve).catch(reject);
       } else {
+        const boundSql = bindPlusSqlParams(sql, params);
         plus.sqlite.executeSql({
-          dbname: dbName,
-          sql,
-          params,
+          name: dbName,
+          sql: boundSql,
           success: function(res) {
             resolve(res);
           },
-          error: function(e) {
+          fail: function(e) {
             reject(e);
           }
         });
@@ -111,17 +274,17 @@ if (uni.restoreGlobal) {
         reject("数据库未初始化");
         return;
       }
-      if (isBrowser) {
+      if (useIndexedDbStorage()) {
         queryIndexedDb(sql, params).then(resolve).catch(reject);
       } else {
+        const boundSql = bindPlusSqlParams(sql, params);
         plus.sqlite.selectSql({
-          dbname: dbName,
-          sql,
-          params,
+          name: dbName,
+          sql: boundSql,
           success: function(res) {
             resolve(res);
           },
-          error: function(e) {
+          fail: function(e) {
             reject(e);
           }
         });

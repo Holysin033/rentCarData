@@ -4,7 +4,7 @@
         {
             "customPlaygroundType" : "local",
             "packageName" : "com.baidu.netdisk",
-            "playground" : "standard",
+            "playground" : "custom",
             "type" : "uni-app:app-android"
         }
     ]

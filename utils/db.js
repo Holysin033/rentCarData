@@ -1,21 +1,65 @@
 // 数据库管理模块
 const dbName = 'car_management';
 let db = null;
-let isBrowser = typeof plus === 'undefined';
 let indexedDb = null;
+
+/** 5+ 官方为 openDatabase / closeDatabase，无 open / close */
+function hasPlusSqlite() {
+	return (
+		typeof plus !== 'undefined' &&
+		plus.sqlite &&
+		typeof plus.sqlite.openDatabase === 'function' &&
+		typeof plus.sqlite.executeSql === 'function' &&
+		typeof plus.sqlite.selectSql === 'function'
+	);
+}
+
+/** 是否在运行时走 IndexedDB（H5/小程序等无可用 plus.sqlite 的环境） */
+function useIndexedDbStorage() {
+	return !hasPlusSqlite();
+}
+
+/** HTML5+ 的 executeSql/selectSql 无 params 数组，将 ? 按序替换为安全字面量 */
+function bindPlusSqlParams(sql, params) {
+	if (!params || params.length === 0) {
+		return sql;
+	}
+	let i = 0;
+	return sql.replace(/\?/g, () => {
+		const v = params[i++];
+		if (v === null || v === undefined) {
+			return 'NULL';
+		}
+		if (typeof v === 'number' && Number.isFinite(v)) {
+			return String(v);
+		}
+		return "'" + String(v).replace(/'/g, "''") + "'";
+	});
+}
 
 // 初始化数据库
 export function initDb() {
 	return new Promise((resolve, reject) => {
-		if (isBrowser) {
-			// 浏览器环境使用IndexedDB
-			initIndexedDB().then(resolve).catch(reject);
+		const runInit = () => {
+			if (hasPlusSqlite()) {
+				initPlusSqlite().then(resolve).catch(reject);
+			} else {
+				initIndexedDB().then(resolve).catch(reject);
+			}
+		};
+
+		// #ifdef APP-PLUS
+		if (typeof plus !== 'undefined') {
+			runInit();
+		} else if (typeof document !== 'undefined') {
+			document.addEventListener('plusready', runInit, { once: true });
 		} else {
-			// App环境使用plus.sqlite
-			// initPlusSqlite().then(resolve).catch(reject);
-			// 遗憾，不知为何是用不了plus.sqlite，只能用IndexedDB
-			initIndexedDB().then(resolve).catch(reject);
+			runInit();
 		}
+		// #endif
+		// #ifndef APP-PLUS
+		runInit();
+		// #endif
 	});
 }
 
@@ -68,16 +112,14 @@ function initIndexedDB() {
 // 初始化plus.sqlite（App环境）
 function initPlusSqlite() {
 	return new Promise((resolve, reject) => {
-		// 打开数据库
-		plus.sqlite.open({
+		plus.sqlite.openDatabase({
 			name: dbName,
 			path: '_doc/' + dbName + '.db',
 			success: function () {
 				db = dbName;
-				// 创建表
 				createTables().then(resolve).catch(reject);
 			},
-			error: function (e) {
+			fail: function (e) {
 				reject(e);
 			}
 		});
@@ -98,12 +140,13 @@ function createTables() {
 			);
 		`;
 
-		// 创建保险表
+		// 创建保险表（与 pages/insurance 中 carName 字段一致）
 		const createInsuranceTable = `
 			CREATE TABLE IF NOT EXISTS insurance (
 				id INTEGER PRIMARY KEY AUTOINCREMENT,
 				carId INTEGER,
 				carNumber TEXT,
+				carName TEXT,
 				company TEXT,
 				expireDate TEXT,
 				premium REAL,
@@ -112,12 +155,13 @@ function createTables() {
 			);
 		`;
 
-		// 创建保养表
+		// 创建保养表（与 pages/maintenance 中 carName 字段一致）
 		const createMaintenanceTable = `
 			CREATE TABLE IF NOT EXISTS maintenance (
 				id INTEGER PRIMARY KEY AUTOINCREMENT,
 				carId INTEGER,
 				carNumber TEXT,
+				carName TEXT,
 				maintenanceDate TEXT,
 				mileage INTEGER,
 				cost REAL,
@@ -160,17 +204,59 @@ function createTables() {
 			);
 		`;
 
-		// 执行创建表的SQL
-		plus.sqlite.executeSql({
-			dbname: dbName,
-			sql: createCarTable + createInsuranceTable + createMaintenanceTable + createRentalTable + createStatisticsTable,
-			success: function () {
-				resolve();
-			},
-			error: function (e) {
-				reject(e);
+		// 逐条执行建表，避免部分端上多语句一次执行失败
+		const statements = [
+			createCarTable,
+			createInsuranceTable,
+			createMaintenanceTable,
+			createRentalTable,
+			createStatisticsTable
+		];
+
+		const runNext = (index) => {
+			if (index >= statements.length) {
+				migratePlusSqliteLegacyColumns().then(resolve).catch(reject);
+				return;
 			}
-		});
+			plus.sqlite.executeSql({
+				name: dbName,
+				sql: statements[index],
+				success: function () {
+					runNext(index + 1);
+				},
+				fail: function (e) {
+					reject(e);
+				}
+			});
+		};
+		runNext(0);
+	});
+}
+
+/** 旧版库仅有 carNumber、无 carName 时补列（新库建表已含 carName 时 ALTER 会失败，忽略即可） */
+function migratePlusSqliteLegacyColumns() {
+	return new Promise((resolve) => {
+		const alters = [
+			'ALTER TABLE insurance ADD COLUMN carName TEXT',
+			'ALTER TABLE maintenance ADD COLUMN carName TEXT'
+		];
+		const runNext = (i) => {
+			if (i >= alters.length) {
+				resolve();
+				return;
+			}
+			plus.sqlite.executeSql({
+				name: dbName,
+				sql: alters[i],
+				success: function () {
+					runNext(i + 1);
+				},
+				fail: function () {
+					runNext(i + 1);
+				}
+			});
+		};
+		runNext(0);
 	});
 }
 
@@ -182,19 +268,18 @@ export function executeSql(sql, params = []) {
 			return;
 		}
 
-		if (isBrowser) {
+		if (useIndexedDbStorage()) {
 			// 浏览器环境使用IndexedDB
 			executeIndexedDb(sql, params).then(resolve).catch(reject);
 		} else {
-			// App环境使用plus.sqlite
+			const boundSql = bindPlusSqlParams(sql, params);
 			plus.sqlite.executeSql({
-				dbname: dbName,
-				sql: sql,
-				params: params,
+				name: dbName,
+				sql: boundSql,
 				success: function (res) {
 					resolve(res);
 				},
-				error: function (e) {
+				fail: function (e) {
 					reject(e);
 				}
 			});
@@ -210,19 +295,18 @@ export function query(sql, params = []) {
 			return;
 		}
 
-		if (isBrowser) {
+		if (useIndexedDbStorage()) {
 			// 浏览器环境使用IndexedDB
 			queryIndexedDb(sql, params).then(resolve).catch(reject);
 		} else {
-			// App环境使用plus.sqlite
+			const boundSql = bindPlusSqlParams(sql, params);
 			plus.sqlite.selectSql({
-				dbname: dbName,
-				sql: sql,
-				params: params,
+				name: dbName,
+				sql: boundSql,
 				success: function (res) {
 					resolve(res);
 				},
-				error: function (e) {
+				fail: function (e) {
 					reject(e);
 				}
 			});
@@ -238,7 +322,7 @@ export function closeDb() {
 			return;
 		}
 
-		if (isBrowser) {
+		if (useIndexedDbStorage()) {
 			// 浏览器环境关闭IndexedDB
 			if (indexedDb) {
 				indexedDb.close();
@@ -247,14 +331,13 @@ export function closeDb() {
 			db = null;
 			resolve();
 		} else {
-			// App环境关闭plus.sqlite
-			plus.sqlite.close({
+			plus.sqlite.closeDatabase({
 				name: dbName,
 				success: function () {
 					db = null;
 					resolve();
 				},
-				error: function (e) {
+				fail: function (e) {
 					reject(e);
 				}
 			});
