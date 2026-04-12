@@ -62,10 +62,40 @@
 	box-shadow: 0 0.0625rem 0.125rem rgba(0, 0, 0, 0.1);
 	margin-bottom: 0.625rem;
 }
+.section-head[data-v-fc23ec97] {
+	display: flex;
+	flex-wrap: wrap;
+	align-items: center;
+	justify-content: space-between;
+	gap: 0.5rem;
+	margin-bottom: 0.375rem;
+}
 .section-title[data-v-fc23ec97] {
 	font-size: 0.875rem;
 	font-weight: bold;
-	margin-bottom: 0.625rem;
+}
+.car-month-filter[data-v-fc23ec97] {
+	display: flex;
+	align-items: center;
+	gap: 0.375rem;
+}
+.filter-label[data-v-fc23ec97] {
+	font-size: 0.6875rem;
+	color: #666;
+}
+.car-month-picker[data-v-fc23ec97] {
+	background-color: #f2f2f7;
+	padding: 0.3125rem 0.625rem;
+	border-radius: 0.25rem;
+	font-size: 0.75rem;
+	color: #007aff;
+}
+.section-hint[data-v-fc23ec97] {
+	display: block;
+	font-size: 0.6875rem;
+	color: #8e8e93;
+	margin-bottom: 0.5rem;
+	line-height: 1.4;
 }
 .table-container[data-v-fc23ec97] {
 	border: 0.03125rem solid #f0f0f0;
@@ -95,4 +125,21 @@
 }
 .table-row .table-cell[data-v-fc23ec97] {
 	color: #666;
+}
+.table-header-3 .table-cell[data-v-fc23ec97] {
+	flex: 1;
+}
+.table-header-3 .table-cell-wide[data-v-fc23ec97] {
+	flex: 1.4;
+	text-align: left;
+	padding-left: 0.625rem;
+}
+.table-header-3 .table-cell[data-v-fc23ec97]:not(.table-cell-wide) {
+	flex: 1;
+}
+.table-empty[data-v-fc23ec97] {
+	text-align: center;
+	padding: 1rem 0.625rem;
+	font-size: 0.75rem;
+	color: #8e8e93;
 }

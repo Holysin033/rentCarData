@@ -38,18 +38,30 @@
 			</view>
 		</view>
 		<view class="table-section">
-			<text class="section-title">按车名收入统计</text>
+			<view class="section-head">
+				<text class="section-title">按车名统计</text>
+				<view class="car-month-filter">
+					<text class="filter-label">月收入月份</text>
+					<picker mode="date" fields="month" @change="onCarStatsMonthChange" :value="carStatsMonth">
+						<view class="picker car-month-picker">
+							{{ carStatsMonth }}
+						</view>
+					</picker>
+				</view>
+			</view>
+			<text class="section-hint">年收入为「所选月份」所在自然年的累计（例：选 2026-05 则年收入为 2026 全年）。</text>
 			<view class="table-container">
-				<view class="table-header">
-					<view class="table-cell">车名</view>
-					<view class="table-cell">收入(元)</view>
-					<view class="table-cell">租约数</view>
+				<view class="table-header table-header-3">
+					<view class="table-cell table-cell-wide">车名</view>
+					<view class="table-cell">月收入(元)</view>
+					<view class="table-cell">年收入(元)</view>
 				</view>
-				<view v-for="item in carData" :key="item.carName" class="table-row">
-					<view class="table-cell">{{ item.carName }}</view>
-					<view class="table-cell">{{ item.income }}</view>
-					<view class="table-cell">{{ item.count }}</view>
+				<view v-for="item in carData" :key="item.carName" class="table-row table-header-3">
+					<view class="table-cell table-cell-wide">{{ item.carName }}</view>
+					<view class="table-cell">{{ item.monthIncome }}</view>
+					<view class="table-cell">{{ item.yearIncome }}</view>
 				</view>
+				<view v-if="carData.length === 0" class="table-empty">暂无车辆租赁数据</view>
 			</view>
 		</view>
 	</view>
@@ -57,10 +69,20 @@
 
 <script>
 import { query } from '../../utils/db.js';
+
+function currentYearMonth() {
+	const d = new Date();
+	const y = d.getFullYear();
+	const m = String(d.getMonth() + 1).padStart(2, '0');
+	return `${y}-${m}`;
+}
+
 export default {
 	data() {
+		const ym = currentYearMonth();
 		return {
-			selectedDate: '2026-04',
+			selectedDate: ym,
+			carStatsMonth: ym,
 			monthlyIncome: 0,
 			yearlyIncome: 0,
 			totalIncome: 0,
@@ -82,8 +104,11 @@ export default {
 	methods: {
 		onDateChange(e) {
 			this.selectedDate = e.detail.value;
-			// 根据选择的日期加载对应的数据
 			this.loadStatistics();
+		},
+		onCarStatsMonthChange(e) {
+			this.carStatsMonth = e.detail.value;
+			this.loadCarData();
 		},
 		loadStatistics() {
 			// 直接从数据库加载统计数据
@@ -141,24 +166,51 @@ export default {
 				];
 			});
 		},
+		rentalRowAmount(row) {
+			let v = row.changedTotalAmount;
+			if (v == null) v = row.initialTotalAmount;
+			if (v == null) v = row.totalAmount;
+			const n = parseFloat(v);
+			return Number.isFinite(n) ? n : 0;
+		},
 		loadCarData() {
-			// 加载按车名收入统计数据
-			const carSql = `SELECT carName, SUM(CASE WHEN changedTotalAmount IS NOT NULL THEN changedTotalAmount ELSE initialTotalAmount END) as income, COUNT(*) as count FROM rental GROUP BY carName ORDER BY income DESC`;
-			query(carSql).then(res => {
-				this.carData = res.map(item => ({
-					carName: item.carName,
-					income: parseFloat(item.income).toFixed(2),
-					count: item.count
-				}));
-			}).catch(err => {
-				console.error('加载按车名收入统计失败:', err);
-				// 加载失败时使用模拟数据
-				this.carData = [
-					{ carName: '大众朗逸', income: '18000.00', count: 5 },
-					{ carName: '丰田凯美瑞', income: '15000.00', count: 4 },
-					{ carName: '本田雅阁', income: '10200.00', count: 3 }
-				];
-			});
+			const month = this.carStatsMonth;
+			const year = month.length >= 4 ? month.substring(0, 4) : '';
+			const sql = `SELECT * FROM rental ORDER BY id DESC`;
+			query(sql)
+				.then(res => {
+					const list = res || [];
+					const names = new Set();
+					const monthMap = {};
+					const yearMap = {};
+					list.forEach(row => {
+						const carName = row.carName || '未命名';
+						names.add(carName);
+						const amt = this.rentalRowAmount(row);
+						const sd = row.startDate || '';
+						if (sd.substring(0, 7) === month) {
+							monthMap[carName] = (monthMap[carName] || 0) + amt;
+						}
+						if (year && sd.substring(0, 4) === year) {
+							yearMap[carName] = (yearMap[carName] || 0) + amt;
+						}
+					});
+					this.carData = Array.from(names)
+						.map(carName => ({
+							carName,
+							monthIncome: (monthMap[carName] || 0).toFixed(2),
+							yearIncome: (yearMap[carName] || 0).toFixed(2)
+						}))
+						.sort((a, b) => parseFloat(b.monthIncome) - parseFloat(a.monthIncome));
+				})
+				.catch(err => {
+					console.error('加载按车名统计失败:', err);
+					this.carData = [
+						{ carName: '大众朗逸', monthIncome: '1200.00', yearIncome: '18000.00' },
+						{ carName: '丰田凯美瑞', monthIncome: '800.00', yearIncome: '15000.00' },
+						{ carName: '本田雅阁', monthIncome: '0.00', yearIncome: '10200.00' }
+					];
+				});
 		}
 	}
 }
@@ -239,10 +291,45 @@ export default {
 	margin-bottom: 20rpx;
 }
 
+.section-head {
+	display: flex;
+	flex-wrap: wrap;
+	align-items: center;
+	justify-content: space-between;
+	gap: 16rpx;
+	margin-bottom: 12rpx;
+}
+
 .section-title {
 	font-size: 28rpx;
 	font-weight: bold;
-	margin-bottom: 20rpx;
+}
+
+.car-month-filter {
+	display: flex;
+	align-items: center;
+	gap: 12rpx;
+}
+
+.filter-label {
+	font-size: 22rpx;
+	color: #666;
+}
+
+.car-month-picker {
+	background-color: #f2f2f7;
+	padding: 10rpx 20rpx;
+	border-radius: 8rpx;
+	font-size: 24rpx;
+	color: #007aff;
+}
+
+.section-hint {
+	display: block;
+	font-size: 22rpx;
+	color: #8e8e93;
+	margin-bottom: 16rpx;
+	line-height: 1.4;
 }
 
 .table-container {
@@ -279,5 +366,26 @@ export default {
 
 .table-row .table-cell {
 	color: #666;
+}
+
+.table-header-3 .table-cell {
+	flex: 1;
+}
+
+.table-header-3 .table-cell-wide {
+	flex: 1.4;
+	text-align: left;
+	padding-left: 20rpx;
+}
+
+.table-header-3 .table-cell:not(.table-cell-wide) {
+	flex: 1;
+}
+
+.table-empty {
+	text-align: center;
+	padding: 32rpx 20rpx;
+	font-size: 24rpx;
+	color: #8e8e93;
 }
 </style>

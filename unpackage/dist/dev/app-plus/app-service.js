@@ -1862,9 +1862,7 @@ if (uni.restoreGlobal) {
         selectedCar: null,
         maintenance: {
           maintenanceDate: "",
-          mileage: "",
-          cost: "",
-          items: ""
+          cost: ""
         }
       };
     },
@@ -1881,7 +1879,7 @@ if (uni.restoreGlobal) {
               this.selectedCar = this.carList[0];
             }
           }).catch((err) => {
-            formatAppLog("error", "at pages/maintenance/add-maintenance.vue:71", "加载车辆列表失败:", err);
+            formatAppLog("error", "at pages/maintenance/add-maintenance.vue:61", "加载车辆列表失败:", err);
             this.carList = [
               {
                 id: 1,
@@ -1916,16 +1914,23 @@ if (uni.restoreGlobal) {
         this.maintenance.maintenanceDate = e.detail.value;
       },
       saveMaintenance() {
-        if (!this.selectedCar || !this.maintenance.maintenanceDate || !this.maintenance.mileage || !this.maintenance.cost || !this.maintenance.items) {
+        if (!this.selectedCar || !this.maintenance.maintenanceDate || this.maintenance.cost === "" || this.maintenance.cost === null) {
           uni.showToast({
-            title: "请填写完整信息",
+            title: "请填写车名、时间与费用",
             icon: "none"
           });
           return;
         }
+        const costNum = parseFloat(this.maintenance.cost);
+        if (Number.isNaN(costNum) || costNum < 0) {
+          uni.showToast({ title: "费用请输入有效数字", icon: "none" });
+          return;
+        }
+        const mileage = 0;
+        const items = "无";
         if (uni.getSystemInfoSync().platform !== "h5") {
           const sql = `INSERT INTO maintenance (carId, carName, maintenanceDate, mileage, cost, items, createdAt) VALUES (?, ?, ?, ?, ?, ?, ?)`;
-          const params = [this.selectedCar.id, this.selectedCar.name, this.maintenance.maintenanceDate, this.maintenance.mileage, this.maintenance.cost, this.maintenance.items, (/* @__PURE__ */ new Date()).toISOString()];
+          const params = [this.selectedCar.id, this.selectedCar.name, this.maintenance.maintenanceDate, mileage, costNum, items, (/* @__PURE__ */ new Date()).toISOString()];
           executeSql(sql, params).then(() => {
             uni.showToast({
               title: "保存成功",
@@ -1933,7 +1938,7 @@ if (uni.restoreGlobal) {
             });
             uni.navigateBack();
           }).catch((err) => {
-            formatAppLog("error", "at pages/maintenance/add-maintenance.vue:131", "保存失败:", err);
+            formatAppLog("error", "at pages/maintenance/add-maintenance.vue:128", "保存失败:", err);
             uni.showToast({
               title: "保存失败",
               icon: "none"
@@ -1974,7 +1979,7 @@ if (uni.restoreGlobal) {
           ], 40, ["range", "value"])
         ]),
         vue.createElementVNode("view", { class: "form-item" }, [
-          vue.createElementVNode("text", { class: "label" }, "保养日期"),
+          vue.createElementVNode("text", { class: "label" }, "时间"),
           vue.createElementVNode("picker", {
             mode: "date",
             onChange: _cache[1] || (_cache[1] = (...args) => $options.onDateChange && $options.onDateChange(...args)),
@@ -1983,28 +1988,11 @@ if (uni.restoreGlobal) {
             vue.createElementVNode(
               "view",
               { class: "picker" },
-              vue.toDisplayString($data.maintenance.maintenanceDate || "请选择保养日期"),
+              vue.toDisplayString($data.maintenance.maintenanceDate || "请选择日期"),
               1
               /* TEXT */
             )
           ], 40, ["value"])
-        ]),
-        vue.createElementVNode("view", { class: "form-item" }, [
-          vue.createElementVNode("text", { class: "label" }, "保养里程"),
-          vue.withDirectives(vue.createElementVNode(
-            "input",
-            {
-              type: "number",
-              "onUpdate:modelValue": _cache[2] || (_cache[2] = ($event) => $data.maintenance.mileage = $event),
-              placeholder: "请输入保养里程",
-              class: "input"
-            },
-            null,
-            512
-            /* NEED_PATCH */
-          ), [
-            [vue.vModelText, $data.maintenance.mileage]
-          ])
         ]),
         vue.createElementVNode("view", { class: "form-item" }, [
           vue.createElementVNode("text", { class: "label" }, "费用"),
@@ -2012,8 +2000,8 @@ if (uni.restoreGlobal) {
             "input",
             {
               type: "number",
-              "onUpdate:modelValue": _cache[3] || (_cache[3] = ($event) => $data.maintenance.cost = $event),
-              placeholder: "请输入费用",
+              "onUpdate:modelValue": _cache[2] || (_cache[2] = ($event) => $data.maintenance.cost = $event),
+              placeholder: "请输入费用（元）",
               class: "input"
             },
             null,
@@ -2023,29 +2011,13 @@ if (uni.restoreGlobal) {
             [vue.vModelText, $data.maintenance.cost]
           ])
         ]),
-        vue.createElementVNode("view", { class: "form-item" }, [
-          vue.createElementVNode("text", { class: "label" }, "保养项目"),
-          vue.withDirectives(vue.createElementVNode(
-            "textarea",
-            {
-              "onUpdate:modelValue": _cache[4] || (_cache[4] = ($event) => $data.maintenance.items = $event),
-              placeholder: "请输入保养项目",
-              class: "textarea"
-            },
-            null,
-            512
-            /* NEED_PATCH */
-          ), [
-            [vue.vModelText, $data.maintenance.items]
-          ])
-        ]),
         vue.createElementVNode("view", { class: "button-group" }, [
           vue.createElementVNode("button", {
-            onClick: _cache[5] || (_cache[5] = (...args) => $options.saveMaintenance && $options.saveMaintenance(...args)),
+            onClick: _cache[3] || (_cache[3] = (...args) => $options.saveMaintenance && $options.saveMaintenance(...args)),
             class: "save-btn"
           }, "保存"),
           vue.createElementVNode("button", {
-            onClick: _cache[6] || (_cache[6] = (...args) => $options.cancel && $options.cancel(...args)),
+            onClick: _cache[4] || (_cache[4] = (...args) => $options.cancel && $options.cancel(...args)),
             class: "cancel-btn"
           }, "取消")
         ])
@@ -2062,9 +2034,7 @@ if (uni.restoreGlobal) {
         maintenance: {
           id: "",
           maintenanceDate: "",
-          mileage: "",
-          cost: "",
-          items: ""
+          cost: ""
         }
       };
     },
@@ -2080,7 +2050,7 @@ if (uni.restoreGlobal) {
           query(sql).then((res) => {
             this.carList = res || [];
           }).catch((err) => {
-            formatAppLog("error", "at pages/maintenance/edit-maintenance.vue:71", "加载车辆列表失败:", err);
+            formatAppLog("error", "at pages/maintenance/edit-maintenance.vue:61", "加载车辆列表失败:", err);
             this.carList = [
               {
                 id: 1,
@@ -2110,21 +2080,24 @@ if (uni.restoreGlobal) {
           const sql = `SELECT * FROM maintenance WHERE id = ?`;
           query(sql, [this.maintenance.id]).then((res) => {
             if (res && res.length > 0) {
-              this.maintenance = res[0];
-              const carIndex = this.carList.findIndex((car) => car.id === this.maintenance.carId);
+              const row = res[0];
+              this.maintenance = {
+                id: row.id,
+                maintenanceDate: row.maintenanceDate || "",
+                cost: row.cost != null ? row.cost : ""
+              };
+              const carIndex = this.carList.findIndex((car) => car.id === row.carId);
               if (carIndex !== -1) {
                 this.selectedCarIndex = carIndex;
                 this.selectedCar = this.carList[carIndex];
               }
             }
           }).catch((err) => {
-            formatAppLog("error", "at pages/maintenance/edit-maintenance.vue:114", "加载保养信息失败:", err);
+            formatAppLog("error", "at pages/maintenance/edit-maintenance.vue:108", "加载保养信息失败:", err);
             this.maintenance = {
               id: this.maintenance.id,
               maintenanceDate: "2026-03-15",
-              mileage: 1e4,
-              cost: 800,
-              items: "机油更换、机滤更换"
+              cost: 800
             };
             this.selectedCar = this.carList[0];
           });
@@ -2132,9 +2105,7 @@ if (uni.restoreGlobal) {
           this.maintenance = {
             id: this.maintenance.id,
             maintenanceDate: "2026-03-15",
-            mileage: 1e4,
-            cost: 800,
-            items: "机油更换、机滤更换"
+            cost: 800
           };
           this.selectedCar = this.carList[0];
         }
@@ -2147,16 +2118,21 @@ if (uni.restoreGlobal) {
         this.maintenance.maintenanceDate = e.detail.value;
       },
       updateMaintenance() {
-        if (!this.selectedCar || !this.maintenance.maintenanceDate || !this.maintenance.mileage || !this.maintenance.cost || !this.maintenance.items) {
+        if (!this.selectedCar || !this.maintenance.maintenanceDate || this.maintenance.cost === "" || this.maintenance.cost === null) {
           uni.showToast({
-            title: "请填写完整信息",
+            title: "请填写车名、时间与费用",
             icon: "none"
           });
           return;
         }
+        const costNum = parseFloat(this.maintenance.cost);
+        if (Number.isNaN(costNum) || costNum < 0) {
+          uni.showToast({ title: "费用请输入有效数字", icon: "none" });
+          return;
+        }
         if (uni.getSystemInfoSync().platform !== "h5") {
-          const sql = `UPDATE maintenance SET carId = ?, carName = ?, maintenanceDate = ?, mileage = ?, cost = ?, items = ? WHERE id = ?`;
-          const params = [this.selectedCar.id, this.selectedCar.name, this.maintenance.maintenanceDate, this.maintenance.mileage, this.maintenance.cost, this.maintenance.items, this.maintenance.id];
+          const sql = `UPDATE maintenance SET carId = ?, carName = ?, maintenanceDate = ?, cost = ? WHERE id = ?`;
+          const params = [this.selectedCar.id, this.selectedCar.name, this.maintenance.maintenanceDate, costNum, this.maintenance.id];
           executeSql(sql, params).then(() => {
             uni.showToast({
               title: "更新成功",
@@ -2164,7 +2140,7 @@ if (uni.restoreGlobal) {
             });
             uni.navigateBack();
           }).catch((err) => {
-            formatAppLog("error", "at pages/maintenance/edit-maintenance.vue:168", "更新失败:", err);
+            formatAppLog("error", "at pages/maintenance/edit-maintenance.vue:160", "更新失败:", err);
             uni.showToast({
               title: "更新失败",
               icon: "none"
@@ -2205,7 +2181,7 @@ if (uni.restoreGlobal) {
           ], 40, ["range", "value"])
         ]),
         vue.createElementVNode("view", { class: "form-item" }, [
-          vue.createElementVNode("text", { class: "label" }, "保养日期"),
+          vue.createElementVNode("text", { class: "label" }, "时间"),
           vue.createElementVNode("picker", {
             mode: "date",
             onChange: _cache[1] || (_cache[1] = (...args) => $options.onDateChange && $options.onDateChange(...args)),
@@ -2214,28 +2190,11 @@ if (uni.restoreGlobal) {
             vue.createElementVNode(
               "view",
               { class: "picker" },
-              vue.toDisplayString($data.maintenance.maintenanceDate || "请选择保养日期"),
+              vue.toDisplayString($data.maintenance.maintenanceDate || "请选择日期"),
               1
               /* TEXT */
             )
           ], 40, ["value"])
-        ]),
-        vue.createElementVNode("view", { class: "form-item" }, [
-          vue.createElementVNode("text", { class: "label" }, "保养里程"),
-          vue.withDirectives(vue.createElementVNode(
-            "input",
-            {
-              type: "number",
-              "onUpdate:modelValue": _cache[2] || (_cache[2] = ($event) => $data.maintenance.mileage = $event),
-              placeholder: "请输入保养里程",
-              class: "input"
-            },
-            null,
-            512
-            /* NEED_PATCH */
-          ), [
-            [vue.vModelText, $data.maintenance.mileage]
-          ])
         ]),
         vue.createElementVNode("view", { class: "form-item" }, [
           vue.createElementVNode("text", { class: "label" }, "费用"),
@@ -2243,8 +2202,8 @@ if (uni.restoreGlobal) {
             "input",
             {
               type: "number",
-              "onUpdate:modelValue": _cache[3] || (_cache[3] = ($event) => $data.maintenance.cost = $event),
-              placeholder: "请输入费用",
+              "onUpdate:modelValue": _cache[2] || (_cache[2] = ($event) => $data.maintenance.cost = $event),
+              placeholder: "请输入费用（元）",
               class: "input"
             },
             null,
@@ -2254,29 +2213,13 @@ if (uni.restoreGlobal) {
             [vue.vModelText, $data.maintenance.cost]
           ])
         ]),
-        vue.createElementVNode("view", { class: "form-item" }, [
-          vue.createElementVNode("text", { class: "label" }, "保养项目"),
-          vue.withDirectives(vue.createElementVNode(
-            "textarea",
-            {
-              "onUpdate:modelValue": _cache[4] || (_cache[4] = ($event) => $data.maintenance.items = $event),
-              placeholder: "请输入保养项目",
-              class: "textarea"
-            },
-            null,
-            512
-            /* NEED_PATCH */
-          ), [
-            [vue.vModelText, $data.maintenance.items]
-          ])
-        ]),
         vue.createElementVNode("view", { class: "button-group" }, [
           vue.createElementVNode("button", {
-            onClick: _cache[5] || (_cache[5] = (...args) => $options.updateMaintenance && $options.updateMaintenance(...args)),
+            onClick: _cache[3] || (_cache[3] = (...args) => $options.updateMaintenance && $options.updateMaintenance(...args)),
             class: "save-btn"
           }, "保存"),
           vue.createElementVNode("button", {
-            onClick: _cache[6] || (_cache[6] = (...args) => $options.cancel && $options.cancel(...args)),
+            onClick: _cache[4] || (_cache[4] = (...args) => $options.cancel && $options.cancel(...args)),
             class: "cancel-btn"
           }, "取消")
         ])
@@ -2350,7 +2293,7 @@ if (uni.restoreGlobal) {
             ];
           }
         }).catch((err) => {
-          formatAppLog("error", "at pages/rental/rental.vue:138", "加载租赁列表失败:", err);
+          formatAppLog("error", "at pages/rental/rental.vue:142", "加载租赁列表失败:", err);
           this.rentalList = [
             {
               id: 1,
@@ -2411,7 +2354,7 @@ if (uni.restoreGlobal) {
                     icon: "success"
                   });
                 }).catch((err) => {
-                  formatAppLog("error", "at pages/rental/rental.vue:208", "删除失败:", err);
+                  formatAppLog("error", "at pages/rental/rental.vue:212", "删除失败:", err);
                   this.rentalList = this.rentalList.filter((item) => item.id !== id);
                   uni.showToast({
                     title: "删除成功",
@@ -2477,7 +2420,7 @@ if (uni.restoreGlobal) {
                   icon: "success"
                 });
               }).catch((err) => {
-                formatAppLog("error", "at pages/rental/rental.vue:283", "续租失败:", err);
+                formatAppLog("error", "at pages/rental/rental.vue:287", "续租失败:", err);
                 uni.showToast({
                   title: "续租失败",
                   icon: "error"
@@ -2523,7 +2466,7 @@ if (uni.restoreGlobal) {
                   icon: "success"
                 });
               }).catch((err) => {
-                formatAppLog("error", "at pages/rental/rental.vue:336", "退租失败:", err);
+                formatAppLog("error", "at pages/rental/rental.vue:340", "退租失败:", err);
                 uni.showToast({
                   title: "退租失败",
                   icon: "error"
@@ -2552,7 +2495,7 @@ if (uni.restoreGlobal) {
                   icon: "success"
                 });
               }).catch((err) => {
-                formatAppLog("error", "at pages/rental/rental.vue:367", "完成租约失败:", err);
+                formatAppLog("error", "at pages/rental/rental.vue:371", "完成租约失败:", err);
                 uni.showToast({
                   title: "完成租约失败",
                   icon: "error"
@@ -3554,10 +3497,18 @@ if (uni.restoreGlobal) {
     ]);
   }
   const PagesRentalEditRental = /* @__PURE__ */ _export_sfc(_sfc_main$2, [["render", _sfc_render$1], ["__scopeId", "data-v-2d0021ad"], ["__file", "D:/newLearn/new_vue/projects/rentApp/rentData/pages/rental/edit-rental.vue"]]);
+  function currentYearMonth() {
+    const d = /* @__PURE__ */ new Date();
+    const y = d.getFullYear();
+    const m = String(d.getMonth() + 1).padStart(2, "0");
+    return `${y}-${m}`;
+  }
   const _sfc_main$1 = {
     data() {
+      const ym = currentYearMonth();
       return {
-        selectedDate: "2026-04",
+        selectedDate: ym,
+        carStatsMonth: ym,
         monthlyIncome: 0,
         yearlyIncome: 0,
         totalIncome: 0,
@@ -3580,12 +3531,16 @@ if (uni.restoreGlobal) {
         this.selectedDate = e.detail.value;
         this.loadStatistics();
       },
+      onCarStatsMonthChange(e) {
+        this.carStatsMonth = e.detail.value;
+        this.loadCarData();
+      },
       loadStatistics() {
         const monthlySql = `SELECT SUM(CASE WHEN changedTotalAmount IS NOT NULL THEN changedTotalAmount ELSE initialTotalAmount END) as total FROM rental WHERE substr(startDate, 1, 7) = ?`;
         query(monthlySql, [this.selectedDate]).then((res) => {
           this.monthlyIncome = res && res[0] && res[0].total ? parseFloat(res[0].total).toFixed(2) : 0;
         }).catch((err) => {
-          formatAppLog("error", "at pages/statistics/statistics.vue:97", "加载月度租赁收入失败:", err);
+          formatAppLog("error", "at pages/statistics/statistics.vue:122", "加载月度租赁收入失败:", err);
           this.monthlyIncome = "3600.00";
         });
         const year = this.selectedDate.substring(0, 4);
@@ -3593,14 +3548,14 @@ if (uni.restoreGlobal) {
         query(yearlySql, [year]).then((res) => {
           this.yearlyIncome = res && res[0] && res[0].total ? parseFloat(res[0].total).toFixed(2) : 0;
         }).catch((err) => {
-          formatAppLog("error", "at pages/statistics/statistics.vue:108", "加载年度租赁收入失败:", err);
+          formatAppLog("error", "at pages/statistics/statistics.vue:133", "加载年度租赁收入失败:", err);
           this.yearlyIncome = "43200.00";
         });
         const totalSql = `SELECT SUM(CASE WHEN changedTotalAmount IS NOT NULL THEN changedTotalAmount ELSE initialTotalAmount END) as total FROM rental`;
         query(totalSql).then((res) => {
           this.totalIncome = res && res[0] && res[0].total ? parseFloat(res[0].total).toFixed(2) : 0;
         }).catch((err) => {
-          formatAppLog("error", "at pages/statistics/statistics.vue:118", "加载总租赁收入失败:", err);
+          formatAppLog("error", "at pages/statistics/statistics.vue:143", "加载总租赁收入失败:", err);
           this.totalIncome = "43200.00";
         });
       },
@@ -3612,7 +3567,7 @@ if (uni.restoreGlobal) {
             income: parseFloat(item.income).toFixed(2)
           }));
         }).catch((err) => {
-          formatAppLog("error", "at pages/statistics/statistics.vue:132", "加载按月收入统计失败:", err);
+          formatAppLog("error", "at pages/statistics/statistics.vue:157", "加载按月收入统计失败:", err);
           this.monthlyData = [
             { month: "2026-01", income: "3000.00" },
             { month: "2026-02", income: "2500.00" },
@@ -3623,20 +3578,47 @@ if (uni.restoreGlobal) {
           ];
         });
       },
+      rentalRowAmount(row) {
+        let v = row.changedTotalAmount;
+        if (v == null)
+          v = row.initialTotalAmount;
+        if (v == null)
+          v = row.totalAmount;
+        const n = parseFloat(v);
+        return Number.isFinite(n) ? n : 0;
+      },
       loadCarData() {
-        const carSql = `SELECT carName, SUM(CASE WHEN changedTotalAmount IS NOT NULL THEN changedTotalAmount ELSE initialTotalAmount END) as income, COUNT(*) as count FROM rental GROUP BY carName ORDER BY income DESC`;
-        query(carSql).then((res) => {
-          this.carData = res.map((item) => ({
-            carName: item.carName,
-            income: parseFloat(item.income).toFixed(2),
-            count: item.count
-          }));
+        const month = this.carStatsMonth;
+        const year = month.length >= 4 ? month.substring(0, 4) : "";
+        const sql = `SELECT * FROM rental ORDER BY id DESC`;
+        query(sql).then((res) => {
+          const list = res || [];
+          const names = /* @__PURE__ */ new Set();
+          const monthMap = {};
+          const yearMap = {};
+          list.forEach((row) => {
+            const carName = row.carName || "未命名";
+            names.add(carName);
+            const amt = this.rentalRowAmount(row);
+            const sd = row.startDate || "";
+            if (sd.substring(0, 7) === month) {
+              monthMap[carName] = (monthMap[carName] || 0) + amt;
+            }
+            if (year && sd.substring(0, 4) === year) {
+              yearMap[carName] = (yearMap[carName] || 0) + amt;
+            }
+          });
+          this.carData = Array.from(names).map((carName) => ({
+            carName,
+            monthIncome: (monthMap[carName] || 0).toFixed(2),
+            yearIncome: (yearMap[carName] || 0).toFixed(2)
+          })).sort((a, b) => parseFloat(b.monthIncome) - parseFloat(a.monthIncome));
         }).catch((err) => {
-          formatAppLog("error", "at pages/statistics/statistics.vue:154", "加载按车名收入统计失败:", err);
+          formatAppLog("error", "at pages/statistics/statistics.vue:207", "加载按车名统计失败:", err);
           this.carData = [
-            { carName: "大众朗逸", income: "18000.00", count: 5 },
-            { carName: "丰田凯美瑞", income: "15000.00", count: 4 },
-            { carName: "本田雅阁", income: "10200.00", count: 3 }
+            { carName: "大众朗逸", monthIncome: "1200.00", yearIncome: "18000.00" },
+            { carName: "丰田凯美瑞", monthIncome: "800.00", yearIncome: "15000.00" },
+            { carName: "本田雅阁", monthIncome: "0.00", yearIncome: "10200.00" }
           ];
         });
       }
@@ -3732,12 +3714,32 @@ if (uni.restoreGlobal) {
         ])
       ]),
       vue.createElementVNode("view", { class: "table-section" }, [
-        vue.createElementVNode("text", { class: "section-title" }, "按车名收入统计"),
+        vue.createElementVNode("view", { class: "section-head" }, [
+          vue.createElementVNode("text", { class: "section-title" }, "按车名统计"),
+          vue.createElementVNode("view", { class: "car-month-filter" }, [
+            vue.createElementVNode("text", { class: "filter-label" }, "月收入月份"),
+            vue.createElementVNode("picker", {
+              mode: "date",
+              fields: "month",
+              onChange: _cache[1] || (_cache[1] = (...args) => $options.onCarStatsMonthChange && $options.onCarStatsMonthChange(...args)),
+              value: $data.carStatsMonth
+            }, [
+              vue.createElementVNode(
+                "view",
+                { class: "picker car-month-picker" },
+                vue.toDisplayString($data.carStatsMonth),
+                1
+                /* TEXT */
+              )
+            ], 40, ["value"])
+          ])
+        ]),
+        vue.createElementVNode("text", { class: "section-hint" }, "年收入为「所选月份」所在自然年的累计（例：选 2026-05 则年收入为 2026 全年）。"),
         vue.createElementVNode("view", { class: "table-container" }, [
-          vue.createElementVNode("view", { class: "table-header" }, [
-            vue.createElementVNode("view", { class: "table-cell" }, "车名"),
-            vue.createElementVNode("view", { class: "table-cell" }, "收入(元)"),
-            vue.createElementVNode("view", { class: "table-cell" }, "租约数")
+          vue.createElementVNode("view", { class: "table-header table-header-3" }, [
+            vue.createElementVNode("view", { class: "table-cell table-cell-wide" }, "车名"),
+            vue.createElementVNode("view", { class: "table-cell" }, "月收入(元)"),
+            vue.createElementVNode("view", { class: "table-cell" }, "年收入(元)")
           ]),
           (vue.openBlock(true), vue.createElementBlock(
             vue.Fragment,
@@ -3745,11 +3747,11 @@ if (uni.restoreGlobal) {
             vue.renderList($data.carData, (item) => {
               return vue.openBlock(), vue.createElementBlock("view", {
                 key: item.carName,
-                class: "table-row"
+                class: "table-row table-header-3"
               }, [
                 vue.createElementVNode(
                   "view",
-                  { class: "table-cell" },
+                  { class: "table-cell table-cell-wide" },
                   vue.toDisplayString(item.carName),
                   1
                   /* TEXT */
@@ -3757,14 +3759,14 @@ if (uni.restoreGlobal) {
                 vue.createElementVNode(
                   "view",
                   { class: "table-cell" },
-                  vue.toDisplayString(item.income),
+                  vue.toDisplayString(item.monthIncome),
                   1
                   /* TEXT */
                 ),
                 vue.createElementVNode(
                   "view",
                   { class: "table-cell" },
-                  vue.toDisplayString(item.count),
+                  vue.toDisplayString(item.yearIncome),
                   1
                   /* TEXT */
                 )
@@ -3772,7 +3774,11 @@ if (uni.restoreGlobal) {
             }),
             128
             /* KEYED_FRAGMENT */
-          ))
+          )),
+          $data.carData.length === 0 ? (vue.openBlock(), vue.createElementBlock("view", {
+            key: 0,
+            class: "table-empty"
+          }, "暂无车辆租赁数据")) : vue.createCommentVNode("v-if", true)
         ])
       ])
     ]);

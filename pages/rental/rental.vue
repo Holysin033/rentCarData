@@ -3,7 +3,8 @@
 		<view class="header">
 			<view class="search-box">
 				<text class="search-icon">🔍</text>
-				<input type="text" v-model="searchKeyword" placeholder="按车名搜索" class="search-input" @input="handleSearch" />
+				<input type="text" v-model="searchKeyword" placeholder="按车名搜索" class="search-input"
+					@input="handleSearch" />
 			</view>
 			<button @click="addRental" class="add-btn">添加租赁记录</button>
 		</view>
@@ -20,8 +21,8 @@
 					<view class="slide-actions-left">
 						<view class="slide-action edit-action" @click.stop="editRental(item)">编辑</view>
 					</view>
-					<view class="item-content" @touchstart="touchStart" @touchmove="touchMove" @touchend="touchEnd" @click.stop
-						:data-id="item.id" :style="{
+					<view class="item-content" @touchstart="touchStart" @touchmove="touchMove" @touchend="touchEnd"
+						@click.stop :data-id="item.id" :style="{
 							transform: showSlideAction && slideId === item.id ? (slideDirection === 'left' ? 'translateX(-120rpx)' : 'translateX(120rpx)') : 'translateX(0)'
 						}">
 						<text class="car-number">{{ item.carName }}</text>
@@ -31,14 +32,16 @@
 						<text class="total-amount">
 							总金额：{{ item.changedTotalAmount || item.initialTotalAmount || item.totalAmount }}元
 							<text v-if="item.changeAction" class="change-info">
-								（{{ item.changedTotalAmount || item.initialTotalAmount }} {{ item.changeAction }} {{ item.changeAmount
+								（{{ item.changedTotalAmount || item.initialTotalAmount }} {{ item.changeAction }} {{
+									item.changeAmount
 								}}
 								于{{
 									formatDateToDay(item.updatedAt) }}）
 							</text>
 						</text>
 						<text class="renter-info" v-if="item.renterName || item.renterPhone">
-							租车人：{{ item.renterName || '未填写' }} {{ item.renterPhone ? '(' + item.renterPhone + ')' : '' }}
+							租车人：{{ item.renterName || '未填写' }} {{ item.renterPhone ? '(' + item.renterPhone + ')' : ''
+							}}
 						</text>
 						<text class="status" :class="item.status === '已完成' ? 'status-completed' : 'status-active'">
 							状态：{{ item.status }}
@@ -46,7 +49,8 @@
 						<view class="item-actions">
 							<button @click.stop="renewRental(item)" class="renew-btn">续租</button>
 							<button @click.stop="returnRental(item)" class="return-btn">退租</button>
-							<button @click.stop="completeRental(item)" class="complete-btn" v-if="item.status === '进行中'">一键完成</button>
+							<button @click.stop="completeRental(item)" class="complete-btn"
+								v-if="item.status === '进行中'">一键完成</button>
 						</view>
 					</view>
 					<!-- 右侧删除按钮 -->

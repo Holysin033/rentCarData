@@ -10,24 +10,16 @@
 				</picker>
 			</view>
 			<view class="form-item">
-				<text class="label">保养日期</text>
+				<text class="label">时间</text>
 				<picker mode="date" @change="onDateChange" :value="maintenance.maintenanceDate">
 					<view class="picker">
-						{{ maintenance.maintenanceDate || '请选择保养日期' }}
+						{{ maintenance.maintenanceDate || '请选择日期' }}
 					</view>
 				</picker>
 			</view>
 			<view class="form-item">
-				<text class="label">保养里程</text>
-				<input type="number" v-model="maintenance.mileage" placeholder="请输入保养里程" class="input" />
-			</view>
-			<view class="form-item">
 				<text class="label">费用</text>
-				<input type="number" v-model="maintenance.cost" placeholder="请输入费用" class="input" />
-			</view>
-			<view class="form-item">
-				<text class="label">保养项目</text>
-				<textarea v-model="maintenance.items" placeholder="请输入保养项目" class="textarea" />
+				<input type="number" v-model="maintenance.cost" placeholder="请输入费用（元）" class="input" />
 			</view>
 			<view class="button-group">
 				<button @click="updateMaintenance" class="save-btn">保存</button>
@@ -48,9 +40,7 @@ export default {
 			maintenance: {
 				id: '',
 				maintenanceDate: '',
-				mileage: '',
-				cost: '',
-				items: ''
+				cost: ''
 			}
 		};
 	},
@@ -102,9 +92,13 @@ export default {
 				const sql = `SELECT * FROM maintenance WHERE id = ?`;
 				query(sql, [this.maintenance.id]).then(res => {
 					if (res && res.length > 0) {
-						this.maintenance = res[0];
-						// 查找对应的车辆
-						const carIndex = this.carList.findIndex(car => car.id === this.maintenance.carId);
+						const row = res[0];
+						this.maintenance = {
+							id: row.id,
+							maintenanceDate: row.maintenanceDate || '',
+							cost: row.cost != null ? row.cost : ''
+						};
+						const carIndex = this.carList.findIndex(car => car.id === row.carId);
 						if (carIndex !== -1) {
 							this.selectedCarIndex = carIndex;
 							this.selectedCar = this.carList[carIndex];
@@ -112,24 +106,18 @@ export default {
 					}
 				}).catch(err => {
 					console.error('加载保养信息失败:', err);
-					// 使用模拟数据作为 fallback
 					this.maintenance = {
 						id: this.maintenance.id,
 						maintenanceDate: '2026-03-15',
-						mileage: 10000,
-						cost: 800,
-						items: '机油更换、机滤更换'
+						cost: 800
 					};
 					this.selectedCar = this.carList[0];
 				});
 			} else {
-				// H5端使用模拟数据
 				this.maintenance = {
 					id: this.maintenance.id,
 					maintenanceDate: '2026-03-15',
-					mileage: 10000,
-					cost: 800,
-					items: '机油更换、机滤更换'
+					cost: 800
 				};
 				this.selectedCar = this.carList[0];
 			}
@@ -142,20 +130,24 @@ export default {
 			this.maintenance.maintenanceDate = e.detail.value;
 		},
 		updateMaintenance() {
-			// 验证表单
-			if (!this.selectedCar || !this.maintenance.maintenanceDate || !this.maintenance.mileage || !this.maintenance.cost || !this.maintenance.items) {
+			if (!this.selectedCar || !this.maintenance.maintenanceDate || this.maintenance.cost === '' || this.maintenance.cost === null) {
 				uni.showToast({
-					title: '请填写完整信息',
+					title: '请填写车名、时间与费用',
 					icon: 'none'
 				});
+				return;
+			}
+			const costNum = parseFloat(this.maintenance.cost);
+			if (Number.isNaN(costNum) || costNum < 0) {
+				uni.showToast({ title: '费用请输入有效数字', icon: 'none' });
 				return;
 			}
 
 			// 检查是否在App环境中
 			if (uni.getSystemInfoSync().platform !== 'h5') {
-				// 更新数据库
-				const sql = `UPDATE maintenance SET carId = ?, carName = ?, maintenanceDate = ?, mileage = ?, cost = ?, items = ? WHERE id = ?`;
-				const params = [this.selectedCar.id, this.selectedCar.name, this.maintenance.maintenanceDate, this.maintenance.mileage, this.maintenance.cost, this.maintenance.items, this.maintenance.id];
+				// 仅更新表单可见字段，保留库中原有里程、保养项目
+				const sql = `UPDATE maintenance SET carId = ?, carName = ?, maintenanceDate = ?, cost = ? WHERE id = ?`;
+				const params = [this.selectedCar.id, this.selectedCar.name, this.maintenance.maintenanceDate, costNum, this.maintenance.id];
 
 				executeSql(sql, params).then(() => {
 					uni.showToast({
@@ -215,15 +207,6 @@ export default {
 	border-radius: 8rpx;
 	padding: 15rpx;
 	font-size: 24rpx;
-}
-
-.textarea {
-	border: 1rpx solid #ddd;
-	border-radius: 8rpx;
-	padding: 15rpx;
-	font-size: 24rpx;
-	height: 150rpx;
-	resize: none;
 }
 
 .picker {
