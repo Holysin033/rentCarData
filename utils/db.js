@@ -419,7 +419,7 @@ function queryIndexedDb(sql, params) {
 					}
 				}
 
-				// 处理ORDER BY子句
+				// 处理ORDER BY子句11
 				const orderMatch = sql.match(/order by\s+([^;]+)/i);
 				if (orderMatch) {
 					const orderClause = orderMatch[1].trim();
