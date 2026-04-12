@@ -1,0 +1,111 @@
+
+.container[data-v-a389b924] {
+	padding: 0.625rem;
+}
+.form[data-v-a389b924] {
+	background-color: white;
+	padding: 0.625rem;
+	border-radius: 0.25rem;
+	box-shadow: 0 0.0625rem 0.125rem rgba(0, 0, 0, 0.1);
+}
+.form-item[data-v-a389b924] {
+	margin-bottom: 0.625rem;
+}
+.label[data-v-a389b924] {
+	display: block;
+	font-size: 0.75rem;
+	color: #333;
+	margin-bottom: 0.25rem;
+}
+.input[data-v-a389b924] {
+	border: 0.03125rem solid #ddd;
+	border-radius: 0.25rem;
+	padding: 0.46875rem;
+	font-size: 0.75rem;
+}
+.picker[data-v-a389b924] {
+	border: 0.03125rem solid #ddd;
+	border-radius: 0.25rem;
+	padding: 0.46875rem;
+	font-size: 0.75rem;
+	color: #666;
+}
+.button-group[data-v-a389b924] {
+	display: flex;
+	gap: 0.625rem;
+	margin-top: 1.25rem;
+}
+.save-btn[data-v-a389b924] {
+	flex: 1;
+	background-color: #007AFF;
+	color: white;
+	padding: 0.46875rem;
+	border-radius: 0.25rem;
+	font-size: 0.75rem;
+}
+.cancel-btn[data-v-a389b924] {
+	flex: 1;
+	background-color: #f0f0f0;
+	color: #333;
+	padding: 0.46875rem;
+	border-radius: 0.25rem;
+	font-size: 0.75rem;
+}
+.image-upload[data-v-a389b924] {
+	margin-top: 0.3125rem;
+}
+.image-preview[data-v-a389b924] {
+	border: 0.03125rem solid #ddd;
+	border-radius: 0.25rem;
+	padding: 0.625rem;
+	text-align: center;
+}
+.image-container[data-v-a389b924] {
+	width: 100%;
+	max-width: 12.5rem;
+	height: 7.8125rem;
+	border: 0.03125rem solid #f0f0f0;
+	border-radius: 0.25rem;
+	overflow: hidden;
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	background-color: #f9f9f9;
+	margin: 0 auto 0.46875rem;
+}
+.preview-image[data-v-a389b924] {
+	width: 100%;
+	height: 100%;
+	border-radius: 0.25rem;
+}
+
+/* 确保图片在不同比例下都能良好显示 */
+.image-container uni-image[data-v-a389b924] {
+	max-width: 100%;
+	max-height: 100%;
+}
+.change-image-btn[data-v-a389b924] {
+	background-color: #FF9500;
+	color: white;
+	padding: 0.3125rem 0.625rem;
+	border-radius: 0.25rem;
+	font-size: 0.625rem;
+}
+.image-placeholder[data-v-a389b924] {
+	border: 0.03125rem dashed #ddd;
+	border-radius: 0.25rem;
+	padding: 1.25rem 0.625rem;
+	text-align: center;
+}
+.choose-image-btn[data-v-a389b924] {
+	background-color: #007AFF;
+	color: white;
+	padding: 0.46875rem 0.9375rem;
+	border-radius: 0.25rem;
+	font-size: 0.75rem;
+	margin-bottom: 0.46875rem;
+}
+.hint[data-v-a389b924] {
+	font-size: 0.625rem;
+	color: #999;
+}

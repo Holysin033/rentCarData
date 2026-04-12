@@ -1,0 +1,105 @@
+
+.container[data-v-e50a8caf] {
+	padding: 0.625rem;
+	padding-top: 3.125rem;
+}
+.header[data-v-e50a8caf] {
+	position: fixed;
+	top: 0;
+	left: 0;
+	right: 0;
+	display: flex;
+	justify-content: space-between;
+	align-items: center;
+	padding: 0.625rem;
+	background-color: #f8f8f8;
+	z-index: 999;
+	gap: 0.3125rem;
+	box-shadow: 0 0.0625rem 0.125rem rgba(0, 0, 0, 0.1);
+}
+.search-box[data-v-e50a8caf] {
+	flex: 1;
+	display: flex;
+	align-items: center;
+	background-color: #F2F2F2;
+	border-radius: 0.25rem;
+	padding: 0 0.46875rem;
+	height: 1.875rem;
+}
+.search-icon[data-v-e50a8caf] {
+	margin-right: 0.3125rem;
+}
+.search-input[data-v-e50a8caf] {
+	flex: 1;
+	height: 100%;
+	font-size: 0.75rem;
+	color: #333;
+}
+.add-btn[data-v-e50a8caf] {
+	background-color: #007AFF;
+	color: white;
+	padding: 0.3125rem 0.625rem;
+	border-radius: 0.25rem;
+	white-space: nowrap;
+}
+.maintenance-list[data-v-e50a8caf] {
+	margin-top: 0.625rem;
+}
+.maintenance-item[data-v-e50a8caf] {
+	background-color: white;
+	padding: 0.625rem;
+	border-radius: 0.25rem;
+	margin-bottom: 0.46875rem;
+	box-shadow: 0 0.0625rem 0.125rem rgba(0, 0, 0, 0.1);
+}
+.item-content[data-v-e50a8caf] {
+	margin-bottom: 0.46875rem;
+}
+.car-number[data-v-e50a8caf] {
+	display: block;
+	font-size: 0.875rem;
+	font-weight: bold;
+	margin-bottom: 0.25rem;
+}
+.maintenance-date[data-v-e50a8caf] {
+	display: block;
+	font-size: 0.75rem;
+	color: #666;
+	margin-bottom: 0.25rem;
+}
+.mileage[data-v-e50a8caf] {
+	display: block;
+	font-size: 0.75rem;
+	color: #666;
+	margin-bottom: 0.25rem;
+}
+.cost[data-v-e50a8caf] {
+	display: block;
+	font-size: 0.75rem;
+	color: #666;
+	margin-bottom: 0.25rem;
+}
+.items[data-v-e50a8caf] {
+	display: block;
+	font-size: 0.75rem;
+	color: #666;
+}
+.item-actions[data-v-e50a8caf] {
+	display: flex;
+	justify-content: flex-end;
+	gap: 0.3125rem;
+}
+.edit-btn[data-v-e50a8caf] {
+	background-color: #FF9500;
+	color: white;
+	padding: 0.25rem 0.5rem;
+	border-radius: 0.25rem;
+	font-size: 0.625rem;
+}
+.delete-btn[data-v-e50a8caf] {
+	background-color: #FF3B30;
+	color: white;
+	padding: 0.25rem 0.5rem;
+	border-radius: 0.25rem;
+	font-size: 0.625rem;
+}

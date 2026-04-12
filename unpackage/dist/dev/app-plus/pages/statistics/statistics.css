@@ -1,0 +1,98 @@
+
+.container[data-v-fc23ec97] {
+	padding: 0.625rem;
+	padding-top: 3.125rem;
+}
+.header[data-v-fc23ec97] {
+	position: fixed;
+	top: 0;
+	left: 0;
+	right: 0;
+	display: flex;
+	justify-content: space-between;
+	align-items: center;
+	padding: 0.625rem;
+	background-color: #f8f8f8;
+	z-index: 999;
+	box-shadow: 0 0.0625rem 0.125rem rgba(0, 0, 0, 0.1);
+}
+.title[data-v-fc23ec97] {
+	font-size: 1rem;
+	font-weight: bold;
+}
+.date-selector[data-v-fc23ec97] {
+	background-color: white;
+	padding: 0.3125rem 0.625rem;
+	border-radius: 0.25rem;
+	box-shadow: 0 0.0625rem 0.125rem rgba(0, 0, 0, 0.1);
+}
+.picker[data-v-fc23ec97] {
+	font-size: 0.75rem;
+}
+.stats-card[data-v-fc23ec97] {
+	background-color: white;
+	padding: 0.625rem;
+	border-radius: 0.25rem;
+	margin-bottom: 0.625rem;
+	box-shadow: 0 0.0625rem 0.125rem rgba(0, 0, 0, 0.1);
+}
+.stat-item[data-v-fc23ec97] {
+	display: flex;
+	justify-content: space-between;
+	align-items: center;
+	padding: 0.46875rem 0;
+	border-bottom: 0.03125rem solid #f0f0f0;
+}
+.stat-item[data-v-fc23ec97]:last-child {
+	border-bottom: none;
+}
+.stat-label[data-v-fc23ec97] {
+	font-size: 0.75rem;
+	color: #666;
+}
+.stat-value[data-v-fc23ec97] {
+	font-size: 0.875rem;
+	font-weight: bold;
+	color: #007AFF;
+}
+.table-section[data-v-fc23ec97] {
+	background-color: white;
+	padding: 0.625rem;
+	border-radius: 0.25rem;
+	box-shadow: 0 0.0625rem 0.125rem rgba(0, 0, 0, 0.1);
+	margin-bottom: 0.625rem;
+}
+.section-title[data-v-fc23ec97] {
+	font-size: 0.875rem;
+	font-weight: bold;
+	margin-bottom: 0.625rem;
+}
+.table-container[data-v-fc23ec97] {
+	border: 0.03125rem solid #f0f0f0;
+	border-radius: 0.25rem;
+	overflow: hidden;
+}
+.table-header[data-v-fc23ec97] {
+	display: flex;
+	background-color: #f8f8f8;
+	font-weight: bold;
+}
+.table-row[data-v-fc23ec97] {
+	display: flex;
+	border-top: 0.03125rem solid #f0f0f0;
+}
+.table-row[data-v-fc23ec97]:nth-child(even) {
+	background-color: #f9f9f9;
+}
+.table-cell[data-v-fc23ec97] {
+	flex: 1;
+	padding: 0.46875rem;
+	text-align: center;
+	font-size: 0.75rem;
+}
+.table-header .table-cell[data-v-fc23ec97] {
+	color: #333;
+}
+.table-row .table-cell[data-v-fc23ec97] {
+	color: #666;
+}

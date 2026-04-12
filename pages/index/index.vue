@@ -9,9 +9,6 @@
 		</view>
 		<view class="car-list">
 			<view v-for="item in filteredCarList" :key="item.id" class="car-item">
-				<view class="status-badge" :class="item.status === '运行中' ? 'status-active' : 'status-idle'">
-					{{ item.status }}
-				</view>
 				<view class="item-content">
 					<text class="car-name">{{ item.name }}</text>
 					<text class="car-number">车牌号：{{ item.carNumber || '未填写' }}</text>
@@ -63,12 +60,11 @@ export default {
 			query(sql).then(res => {
 				this.carList = res || [];
 
-				// 为每个车辆添加最新的保养时间、保险时间和状态
+				// 为每个车辆添加最新的保养时间和保险时间
 				this.carList.forEach(car => {
 					// 初始化默认值
 					car.latestMaintenance = '无';
 					car.latestInsurance = '无';
-					car.status = '闲置';
 
 					// 查询最新保养记录
 					query(`SELECT maintenanceDate FROM maintenance WHERE carId = ? ORDER BY maintenanceDate DESC LIMIT 1`, [car.id]).then(maintenanceRes => {
@@ -85,13 +81,6 @@ export default {
 							car.latestInsurance = insuranceRes[0].expireDate;
 						}
 					});
-
-					// 查询车辆是否有进行中的租约
-					query(`SELECT * FROM rental WHERE carId = ? AND status = '进行中' LIMIT 1`, [car.id]).then(rentalRes => {
-						if (rentalRes && rentalRes.length > 0) {
-							car.status = '运行中';
-						}
-					});
 				});
 				// 如果数据库中没有数据，使用模拟数据
 				if (this.carList.length === 0) {
@@ -102,8 +91,7 @@ export default {
 							carNumber: '京A12345',
 							imagePath: '',
 							latestMaintenance: '2026-03-15',
-							latestInsurance: '2026-12-31',
-							status: '运行中'
+							latestInsurance: '2026-12-31'
 						},
 						{
 							id: 2,
@@ -111,8 +99,7 @@ export default {
 							carNumber: '京B67890',
 							imagePath: '',
 							latestMaintenance: '2026-02-20',
-							latestInsurance: '2026-11-30',
-							status: '闲置'
+							latestInsurance: '2026-11-30'
 						}
 					];
 				}
@@ -126,8 +113,7 @@ export default {
 						carNumber: '京A12345',
 						imagePath: '',
 						latestMaintenance: '2026-03-15',
-						latestInsurance: '2026-12-31',
-						status: '运行中'
+						latestInsurance: '2026-12-31'
 					},
 					{
 						id: 2,
@@ -135,8 +121,7 @@ export default {
 						carNumber: '京B67890',
 						imagePath: '',
 						latestMaintenance: '2026-02-20',
-						latestInsurance: '2026-11-30',
-						status: '闲置'
+						latestInsurance: '2026-11-30'
 					}
 				];
 			});
@@ -248,26 +233,6 @@ export default {
 	border-radius: 8rpx;
 	margin-bottom: 15rpx;
 	box-shadow: 0 2rpx 4rpx rgba(0, 0, 0, 0.1);
-	position: relative;
-}
-
-.status-badge {
-	position: absolute;
-	top: 10rpx;
-	right: 10rpx;
-	padding: 5rpx 15rpx;
-	border-radius: 20rpx;
-	font-size: 20rpx;
-	font-weight: bold;
-	color: white;
-}
-
-.status-active {
-	background-color: #FF9500;
-}
-
-.status-idle {
-	background-color: #34C759;
 }
 
 .item-content {

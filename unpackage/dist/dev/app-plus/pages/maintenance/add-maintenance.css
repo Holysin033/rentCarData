@@ -1,0 +1,61 @@
+
+.container[data-v-cf4facb6] {
+	padding: 0.625rem;
+}
+.form[data-v-cf4facb6] {
+	background-color: white;
+	padding: 0.625rem;
+	border-radius: 0.25rem;
+	box-shadow: 0 0.0625rem 0.125rem rgba(0, 0, 0, 0.1);
+}
+.form-item[data-v-cf4facb6] {
+	margin-bottom: 0.625rem;
+}
+.label[data-v-cf4facb6] {
+	display: block;
+	font-size: 0.75rem;
+	color: #333;
+	margin-bottom: 0.25rem;
+}
+.input[data-v-cf4facb6] {
+	border: 0.03125rem solid #ddd;
+	border-radius: 0.25rem;
+	padding: 0.46875rem;
+	font-size: 0.75rem;
+}
+.textarea[data-v-cf4facb6] {
+	border: 0.03125rem solid #ddd;
+	border-radius: 0.25rem;
+	padding: 0.46875rem;
+	font-size: 0.75rem;
+	height: 4.6875rem;
+	resize: none;
+}
+.picker[data-v-cf4facb6] {
+	border: 0.03125rem solid #ddd;
+	border-radius: 0.25rem;
+	padding: 0.46875rem;
+	font-size: 0.75rem;
+	color: #666;
+}
+.button-group[data-v-cf4facb6] {
+	display: flex;
+	gap: 0.625rem;
+	margin-top: 1.25rem;
+}
+.save-btn[data-v-cf4facb6] {
+	flex: 1;
+	background-color: #007AFF;
+	color: white;
+	padding: 0.46875rem;
+	border-radius: 0.25rem;
+	font-size: 0.75rem;
+}
+.cancel-btn[data-v-cf4facb6] {
+	flex: 1;
+	background-color: #f0f0f0;
+	color: #333;
+	padding: 0.46875rem;
+	border-radius: 0.25rem;
+	font-size: 0.75rem;
+}

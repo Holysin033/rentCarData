@@ -20,7 +20,7 @@ export default {
 			initDb().then(() => {
 				console.log('数据库初始化成功');
 			}).catch(err => {
-				console.error('数据库初始化失败:', err);
+				console.warn('数据库初始化失败，使用模拟数据:', err);
 				// 初始化失败时使用模拟数据
 				console.log('使用模拟数据');
 			});

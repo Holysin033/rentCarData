@@ -191,7 +191,7 @@ export default {
 				success: (res) => {
 					if (res.confirm) {
 						const inputAmount = parseFloat(res.content);
-						const totalAmount = rentalItem.changedTotalAmount || rentalItem.initialTotalAmount;
+						const totalAmount = rentalItem.changedTotalAmount || parseFloat(rentalItem.initialTotalAmount);
 
 						// 验证金额是否正确
 						if (inputAmount === totalAmount) {
@@ -488,8 +488,10 @@ export default {
 
 .tab-section {
 	display: flex;
-	margin-bottom: 20rpx;
-	background-color: #F8F8F8;
+	margin-top: 30rpx;
+	/* margin-bottom: 10rpx; */
+	background-color: #fdfdfd;
+	box-shadow: 0 2rpx 4rpx rgba(0, 0, 0, 0.1);
 	border-radius: 8rpx;
 	overflow: hidden;
 }
@@ -545,7 +547,7 @@ export default {
 	padding: 20rpx;
 	z-index: 1;
 	background-color: white;
-	transition: transform 0.3s ease;
+	transition: transform 0.3s cubic-bezier(0.25, 0.46, 0.45, 0.94);
 }
 
 .car-number {

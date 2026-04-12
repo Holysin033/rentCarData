@@ -1,0 +1,222 @@
+
+.container[data-v-c7393d3c] {
+	padding: 0.625rem;
+	padding-top: 3.125rem;
+}
+.header[data-v-c7393d3c] {
+	position: fixed;
+	top: 0;
+	left: 0;
+	right: 0;
+	display: flex;
+	justify-content: space-between;
+	align-items: center;
+	padding: 0.625rem;
+	background-color: #f8f8f8;
+	z-index: 999;
+	gap: 0.3125rem;
+	box-shadow: 0 0.0625rem 0.125rem rgba(0, 0, 0, 0.1);
+}
+.search-box[data-v-c7393d3c] {
+	flex: 1;
+	display: flex;
+	align-items: center;
+	background-color: #F2F2F2;
+	border-radius: 0.25rem;
+	padding: 0 0.46875rem;
+	height: 1.875rem;
+}
+.search-icon[data-v-c7393d3c] {
+	margin-right: 0.3125rem;
+}
+.search-input[data-v-c7393d3c] {
+	flex: 1;
+	height: 100%;
+	font-size: 0.75rem;
+	color: #333;
+}
+.add-btn[data-v-c7393d3c] {
+	background-color: #007AFF;
+	color: white;
+	padding: 0.3125rem 0.625rem;
+	border-radius: 0.25rem;
+	white-space: nowrap;
+}
+.tab-section[data-v-c7393d3c] {
+	display: flex;
+	margin-top: 0.9375rem;
+	/* margin-bottom: 10rpx; */
+	background-color: #fdfdfd;
+	box-shadow: 0 0.0625rem 0.125rem rgba(0, 0, 0, 0.1);
+	border-radius: 0.25rem;
+	overflow: hidden;
+}
+.tab-item[data-v-c7393d3c] {
+	flex: 1;
+	text-align: center;
+	padding: 0.46875rem 0;
+	font-size: 0.75rem;
+	color: #666;
+	transition: all 0.3s ease;
+}
+.tab-item.active[data-v-c7393d3c] {
+	background-color: #007AFF;
+	color: white;
+	font-weight: bold;
+}
+.picker-text[data-v-c7393d3c] {
+	font-size: 0.6875rem;
+	color: #333;
+}
+.reset-btn[data-v-c7393d3c] {
+	background-color: #F2F2F2;
+	color: #666;
+	padding: 0.3125rem 0.625rem;
+	border-radius: 0.25rem;
+	font-size: 0.625rem;
+	align-self: flex-end;
+}
+.rental-list[data-v-c7393d3c] {
+	margin-top: 0.625rem;
+}
+.rental-item[data-v-c7393d3c] {
+	margin-bottom: 0.46875rem;
+	box-shadow: 0 0.0625rem 0.125rem rgba(0, 0, 0, 0.1);
+	border-radius: 0.25rem;
+	overflow: hidden;
+}
+.rental-item-wrapper[data-v-c7393d3c] {
+	position: relative;
+	display: flex;
+	background-color: white;
+}
+.item-content[data-v-c7393d3c] {
+	flex: 1;
+	padding: 0.625rem;
+	z-index: 1;
+	background-color: white;
+	transition: transform 0.3s cubic-bezier(0.25, 0.46, 0.45, 0.94);
+}
+.car-number[data-v-c7393d3c] {
+	display: block;
+	font-size: 0.875rem;
+	font-weight: bold;
+	margin-bottom: 0.25rem;
+}
+.rental-date[data-v-c7393d3c] {
+	display: block;
+	font-size: 0.75rem;
+	color: #666;
+	margin-bottom: 0.25rem;
+}
+.days[data-v-c7393d3c] {
+	display: block;
+	font-size: 0.75rem;
+	color: #666;
+	margin-bottom: 0.25rem;
+}
+.daily-rate[data-v-c7393d3c] {
+	display: block;
+	font-size: 0.75rem;
+	color: #666;
+	margin-bottom: 0.25rem;
+}
+.total-amount[data-v-c7393d3c] {
+	display: block;
+	font-size: 0.75rem;
+	color: #666;
+	margin-bottom: 0.25rem;
+}
+.change-info[data-v-c7393d3c] {
+	font-size: 0.625rem;
+	color: #999;
+	margin-left: 0.3125rem;
+}
+.renter-info[data-v-c7393d3c] {
+	display: block;
+	font-size: 0.75rem;
+	color: #007AFF;
+	margin-bottom: 0.25rem;
+}
+.status[data-v-c7393d3c] {
+	display: block;
+	font-size: 0.75rem;
+	font-weight: bold;
+}
+.status-active[data-v-c7393d3c] {
+	color: #FF9500;
+}
+.status-completed[data-v-c7393d3c] {
+	color: #34C759;
+}
+.slide-actions-left[data-v-c7393d3c] {
+	position: absolute;
+	top: 0;
+	left: 0;
+	height: 100%;
+	display: flex;
+	z-index: 0;
+}
+.slide-actions-right[data-v-c7393d3c] {
+	position: absolute;
+	top: 0;
+	right: 0;
+	height: 100%;
+	display: flex;
+	z-index: 0;
+}
+.slide-action[data-v-c7393d3c] {
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	width: 3.75rem;
+	font-size: 0.75rem;
+	color: white;
+}
+.edit-action[data-v-c7393d3c] {
+	background-color: #FF9500;
+}
+.delete-action[data-v-c7393d3c] {
+	background-color: #FF3B30;
+}
+.item-actions[data-v-c7393d3c] {
+	display: flex;
+	justify-content: flex-end;
+	gap: 0.3125rem;
+	margin-top: 0.46875rem;
+}
+.edit-btn[data-v-c7393d3c] {
+	background-color: #FF9500;
+	color: white;
+	padding: 0.25rem 0.5rem;
+	border-radius: 0.25rem;
+	font-size: 0.625rem;
+}
+.renew-btn[data-v-c7393d3c] {
+	background-color: #34C759;
+	color: white;
+	padding: 0.25rem 0.5rem;
+	border-radius: 0.25rem;
+	font-size: 0.625rem;
+}
+.return-btn[data-v-c7393d3c] {
+	background-color: #FF9500;
+	color: white;
+	padding: 0.25rem 0.5rem;
+	border-radius: 0.25rem;
+	font-size: 0.625rem;
+}
+.complete-btn[data-v-c7393d3c] {
+	background-color: #34C759;
+	color: white;
+	padding: 0.25rem 0.5rem;
+	border-radius: 0.25rem;
+	font-size: 0.625rem;
+}
+.delete-btn[data-v-c7393d3c] {
+	background-color: #FF3B30;
+	color: white;
+	padding: 0.25rem 0.5rem;
+	border-radius: 0.25rem;
+	font-size: 0.625rem;
+}

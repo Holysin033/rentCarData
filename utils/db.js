@@ -12,7 +12,9 @@ export function initDb() {
 			initIndexedDB().then(resolve).catch(reject);
 		} else {
 			// App环境使用plus.sqlite
-			initPlusSqlite().then(resolve).catch(reject);
+			// initPlusSqlite().then(resolve).catch(reject);
+			// 遗憾，不知为何是用不了plus.sqlite，只能用IndexedDB
+			initIndexedDB().then(resolve).catch(reject);
 		}
 	});
 }
@@ -420,10 +422,64 @@ function queryIndexedDb(sql, params) {
 					} else if (whereClause.includes('carId = ?') && params.length > 0) {
 						const carId = params[0];
 						result = result.filter(item => item.carId == carId);
+					} else if (whereClause.includes('substr') && params.length > 0) {
+						// 处理substr(startDate, 1, 7) = ? 的情况
+						const value = params[0];
+						result = result.filter(item => {
+							if (whereClause.includes('startDate')) {
+								return item.startDate && item.startDate.substring(0, 7) == value;
+							} else if (whereClause.includes('maintenanceDate')) {
+								return item.maintenanceDate && item.maintenanceDate.substring(0, 7) == value;
+							}
+							return false;
+						});
 					}
 				}
 
-				// 处理ORDER BY子句11
+				// 处理GROUP BY子句和聚合函数
+				const groupMatch = sql.match(/group by\s+([^;]+)/i);
+				if (groupMatch) {
+					const groupField = groupMatch[1].trim();
+					const sumMatch = sql.match(/sum\s*\(.*?\)\s*as\s*(\w+)/i);
+					if (sumMatch) {
+						const sumField = sumMatch[1];
+						// 分组求和
+						const groupedData = {};
+						result.forEach(item => {
+							let groupKey;
+							if (groupField === 'substr(startDate, 1, 7)') {
+								groupKey = item.startDate ? item.startDate.substring(0, 7) : '';
+							} else if (groupField === 'carName') {
+								groupKey = item.carName || '';
+							} else {
+								groupKey = item[groupField] || '';
+							}
+							if (!groupedData[groupKey]) {
+								groupedData[groupKey] = 0;
+							}
+							// 计算收入，优先使用changedTotalAmount，否则使用initialTotalAmount
+							const amount = item.changedTotalAmount || item.initialTotalAmount || 0;
+							groupedData[groupKey] += amount;
+						});
+						// 转换为数组
+						result = Object.entries(groupedData).map(([key, value]) => {
+							const item = {};
+							if (groupField === 'substr(startDate, 1, 7)') {
+								item.month = key;
+							} else if (groupField === 'carName') {
+								item.carName = key;
+								// 计算租约数
+								item.count = result.filter(i => i.carName === key).length;
+							} else {
+								item[groupField] = key;
+							}
+							item[sumField] = value;
+							return item;
+						});
+					}
+				}
+
+				// 处理ORDER BY子句
 				const orderMatch = sql.match(/order by\s+([^;]+)/i);
 				if (orderMatch) {
 					const orderClause = orderMatch[1].trim();
