@@ -135,11 +135,15 @@ function createTables() {
 				endDate TEXT,
 				days INTEGER,
 				dailyRate REAL,
-				totalAmount REAL,
+				initialTotalAmount REAL,
+				changeAmount REAL,
+				changeAction TEXT,
+				changedTotalAmount REAL,
 				renterName TEXT,
 				renterPhone TEXT,
 				status TEXT,
 				createdAt TEXT,
+				updatedAt TEXT,
 				FOREIGN KEY (carId) REFERENCES car(id)
 			);
 		`;

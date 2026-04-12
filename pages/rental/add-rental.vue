@@ -53,7 +53,8 @@
 					<switch :checked="autoCalculate" @change="onAutoCalculateChange" color="#007AFF" />
 					<text class="switch-label">{{ autoCalculate ? '自动计算' : '手动输入' }}</text>
 				</view>
-				<input type="digit" v-model="rental.totalAmount" placeholder="请输入总金额" class="input" :disabled="autoCalculate" />
+				<input type="digit" v-model="rental.initialTotalAmount" placeholder="请输入总金额" class="input"
+					:disabled="autoCalculate" />
 			</view>
 			<view class="form-item">
 				<text class="label">租车人姓名</text>
@@ -97,7 +98,7 @@ export default {
 				endDate: '',
 				days: '',
 				dailyRate: '',
-				totalAmount: '',
+				initialTotalAmount: '',
 				renterName: '',
 				renterPhone: ''
 			},
@@ -187,7 +188,7 @@ export default {
 			if (this.autoCalculate && this.rental.days && this.rental.dailyRate) {
 				const days = parseFloat(this.rental.days);
 				const dailyRate = parseFloat(this.rental.dailyRate);
-				this.rental.totalAmount = (days * dailyRate).toFixed(2);
+				this.rental.initialTotalAmount = (days * dailyRate).toFixed(2);
 			}
 		},
 		onAutoCalculateChange(e) {
@@ -201,7 +202,7 @@ export default {
 		},
 		saveRental() {
 			// 验证表单
-			if (!this.selectedCar || !this.rental.startDate || !this.rental.endDate || !this.rental.days || !this.rental.dailyRate || !this.rental.totalAmount) {
+			if (!this.selectedCar || !this.rental.startDate || !this.rental.endDate || !this.rental.days || !this.rental.dailyRate || !this.rental.initialTotalAmount) {
 				uni.showToast({
 					title: '请填写完整信息',
 					icon: 'none'
@@ -211,7 +212,7 @@ export default {
 
 			// 直接保存到数据库
 			// db.js会自动处理浏览器环境（IndexedDB）和App环境（plus.sqlite）
-			const sql = `INSERT INTO rental (carId, carName, startDate, endDate, days, dailyRate, totalAmount, renterName, renterPhone, status, createdAt) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`;
+			const sql = `INSERT INTO rental (carId, carName, startDate, endDate, days, dailyRate, initialTotalAmount, renterName, renterPhone, status, createdAt) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`;
 			const params = [
 				this.selectedCar.id,
 				this.selectedCar.name,
@@ -219,7 +220,7 @@ export default {
 				this.rental.endDate,
 				this.rental.days,
 				this.rental.dailyRate,
-				this.rental.totalAmount,
+				this.rental.initialTotalAmount,
 				this.rental.renterName,
 				this.rental.renterPhone,
 				this.statusOptions[this.selectedStatusIndex],
