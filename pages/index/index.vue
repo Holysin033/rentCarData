@@ -15,12 +15,25 @@
 		</view>
 		<view class="car-list">
 			<view v-for="item in filteredCarList" :key="item.id" class="car-item">
-				<view class="item-content">
-					<text class="car-name">{{ item.name }}</text>
-					<text class="car-number">车牌号：{{ item.carNumber || '未填写' }}</text>
-					<text class="image-path" v-if="item.imagePath">照片路径：{{ item.imagePath }}</text>
-					<text class="maintenance-date">最新保养：{{ item.latestMaintenance || '无' }}</text>
-					<text class="insurance-date">最新保险：{{ item.latestInsurance || '无' }}</text>
+				<view class="car-item-body">
+					<view class="car-thumb-wrap">
+						<image
+							v-if="item.imagePath"
+							class="car-thumb"
+							:src="item.imagePath"
+							mode="aspectFill"
+							lazy-load
+						/>
+						<view v-else class="car-thumb-placeholder">
+							<text class="car-thumb-icon">🚗</text>
+						</view>
+					</view>
+					<view class="item-content">
+						<text class="car-name">{{ item.name }}</text>
+						<text class="car-number">车牌号：{{ item.carNumber || '未填写' }}</text>
+						<text class="maintenance-date">最新保养：{{ item.latestMaintenance || '无' }}</text>
+						<text class="insurance-date">最新保险：{{ item.latestInsurance || '无' }}</text>
+					</view>
 				</view>
 				<view class="item-actions">
 					<button @click="editCar(item)" class="edit-btn">编辑</button>
@@ -262,8 +275,49 @@ export default {
 	box-shadow: 0 2rpx 4rpx rgba(0, 0, 0, 0.1);
 }
 
-.item-content {
+.car-item-body {
+	display: flex;
+	flex-direction: row;
+	align-items: flex-start;
+	gap: 24rpx;
 	margin-bottom: 15rpx;
+}
+
+.car-thumb-wrap {
+	flex-shrink: 0;
+	width: 144rpx;
+	height: 144rpx;
+	border-radius: 16rpx;
+	overflow: hidden;
+	background-color: #e8ecf0;
+	border: 1rpx solid rgba(0, 0, 0, 0.06);
+}
+
+.car-thumb {
+	width: 100%;
+	height: 100%;
+	display: block;
+}
+
+.car-thumb-placeholder {
+	width: 100%;
+	height: 100%;
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	background: linear-gradient(145deg, #f2f4f8, #e4e8ef);
+}
+
+.car-thumb-icon {
+	font-size: 56rpx;
+	line-height: 1;
+	opacity: 0.45;
+}
+
+.item-content {
+	flex: 1;
+	min-width: 0;
+	margin-bottom: 0;
 }
 
 .car-name {
@@ -274,13 +328,6 @@ export default {
 }
 
 .car-number {
-	display: block;
-	font-size: 24rpx;
-	color: #666;
-	margin-bottom: 8rpx;
-}
-
-.image-path {
 	display: block;
 	font-size: 24rpx;
 	color: #666;

@@ -20,7 +20,7 @@
 					</view>
 					<view v-else class="image-placeholder">
 						<button @click="chooseImage" class="choose-image-btn">选择图片</button>
-						<text class="hint">图片将保存在static/carImgs文件夹中</text>
+						<text class="hint">选择后保存到应用本地目录，列表与编辑页可正常显示</text>
 					</view>
 				</view>
 			</view>
@@ -34,6 +34,7 @@
 
 <script>
 import { executeSql } from '../../utils/db.js';
+import { chooseCarPhoto } from '../../utils/carImage.js';
 export default {
 	data() {
 		return {
@@ -76,28 +77,18 @@ export default {
 			});
 		},
 		chooseImage() {
-			uni.chooseImage({
-				count: 1,
-				sizeType: ['original', 'compressed'],
-				sourceType: ['album', 'camera'],
-				success: (res) => {
-					// 生成图片保存路径，保存在static/carImgs文件夹下
-					const fileName = 'img_' + Date.now() + '.jpg';
-					const imagePath = 'static/carImgs/' + fileName;
-					this.car.imagePath = imagePath;
-					uni.showToast({
-						title: '图片选择成功',
-						icon: 'success'
-					});
-				},
-				fail: (err) => {
+			chooseCarPhoto()
+				.then((savedPath) => {
+					this.car.imagePath = savedPath;
+					uni.showToast({ title: '图片已保存', icon: 'success' });
+				})
+				.catch((err) => {
 					console.error('选择图片失败:', err);
 					uni.showToast({
-						title: '选择图片失败',
+						title: err && err.errMsg ? err.errMsg : '选择图片失败',
 						icon: 'none'
 					});
-				}
-			});
+				});
 		},
 		cancel() {
 			uni.navigateBack();

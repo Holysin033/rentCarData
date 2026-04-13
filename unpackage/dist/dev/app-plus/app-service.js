@@ -584,7 +584,7 @@ if (uni.restoreGlobal) {
             ];
           }
         }).catch((err) => {
-          formatAppLog("error", "at pages/index/index.vue:116", "加载车辆列表失败:", err);
+          formatAppLog("error", "at pages/index/index.vue:129", "加载车辆列表失败:", err);
           this.carList = [
             {
               id: 1,
@@ -629,7 +629,7 @@ if (uni.restoreGlobal) {
                   icon: "success"
                 });
               }).catch((err) => {
-                formatAppLog("error", "at pages/index/index.vue:166", "删除失败:", err);
+                formatAppLog("error", "at pages/index/index.vue:179", "删除失败:", err);
                 this.carList = this.carList.filter((item) => item.id !== id);
                 uni.showToast({
                   title: "删除成功",
@@ -676,45 +676,51 @@ if (uni.restoreGlobal) {
               key: item.id,
               class: "car-item"
             }, [
-              vue.createElementVNode("view", { class: "item-content" }, [
-                vue.createElementVNode(
-                  "text",
-                  { class: "car-name" },
-                  vue.toDisplayString(item.name),
-                  1
-                  /* TEXT */
-                ),
-                vue.createElementVNode(
-                  "text",
-                  { class: "car-number" },
-                  "车牌号：" + vue.toDisplayString(item.carNumber || "未填写"),
-                  1
-                  /* TEXT */
-                ),
-                item.imagePath ? (vue.openBlock(), vue.createElementBlock(
-                  "text",
-                  {
+              vue.createElementVNode("view", { class: "car-item-body" }, [
+                vue.createElementVNode("view", { class: "car-thumb-wrap" }, [
+                  item.imagePath ? (vue.openBlock(), vue.createElementBlock("image", {
                     key: 0,
-                    class: "image-path"
-                  },
-                  "照片路径：" + vue.toDisplayString(item.imagePath),
-                  1
-                  /* TEXT */
-                )) : vue.createCommentVNode("v-if", true),
-                vue.createElementVNode(
-                  "text",
-                  { class: "maintenance-date" },
-                  "最新保养：" + vue.toDisplayString(item.latestMaintenance || "无"),
-                  1
-                  /* TEXT */
-                ),
-                vue.createElementVNode(
-                  "text",
-                  { class: "insurance-date" },
-                  "最新保险：" + vue.toDisplayString(item.latestInsurance || "无"),
-                  1
-                  /* TEXT */
-                )
+                    class: "car-thumb",
+                    src: item.imagePath,
+                    mode: "aspectFill",
+                    "lazy-load": ""
+                  }, null, 8, ["src"])) : (vue.openBlock(), vue.createElementBlock("view", {
+                    key: 1,
+                    class: "car-thumb-placeholder"
+                  }, [
+                    vue.createElementVNode("text", { class: "car-thumb-icon" }, "🚗")
+                  ]))
+                ]),
+                vue.createElementVNode("view", { class: "item-content" }, [
+                  vue.createElementVNode(
+                    "text",
+                    { class: "car-name" },
+                    vue.toDisplayString(item.name),
+                    1
+                    /* TEXT */
+                  ),
+                  vue.createElementVNode(
+                    "text",
+                    { class: "car-number" },
+                    "车牌号：" + vue.toDisplayString(item.carNumber || "未填写"),
+                    1
+                    /* TEXT */
+                  ),
+                  vue.createElementVNode(
+                    "text",
+                    { class: "maintenance-date" },
+                    "最新保养：" + vue.toDisplayString(item.latestMaintenance || "无"),
+                    1
+                    /* TEXT */
+                  ),
+                  vue.createElementVNode(
+                    "text",
+                    { class: "insurance-date" },
+                    "最新保险：" + vue.toDisplayString(item.latestInsurance || "无"),
+                    1
+                    /* TEXT */
+                  )
+                ])
               ]),
               vue.createElementVNode("view", { class: "item-actions" }, [
                 vue.createElementVNode("button", {
@@ -741,6 +747,37 @@ if (uni.restoreGlobal) {
     ]);
   }
   const PagesIndexIndex = /* @__PURE__ */ _export_sfc(_sfc_main$d, [["render", _sfc_render$c], ["__scopeId", "data-v-1cf27b2a"], ["__file", "D:/newLearn/new_vue/projects/rentApp/rentData/pages/index/index.vue"]]);
+  function chooseCarPhoto() {
+    return new Promise((resolve, reject) => {
+      uni.chooseImage({
+        count: 1,
+        sizeType: ["compressed", "original"],
+        sourceType: ["album", "camera"],
+        success: (res) => {
+          const tempPath = res.tempFilePaths && res.tempFilePaths[0];
+          if (!tempPath) {
+            reject(new Error("未获取到图片"));
+            return;
+          }
+          if (typeof uni.saveFile === "function") {
+            uni.saveFile({
+              tempFilePath: tempPath,
+              success: (saveRes) => {
+                resolve(saveRes.savedFilePath);
+              },
+              fail: (err) => {
+                formatAppLog("warn", "at utils/carImage.js:24", "saveFile 失败，使用临时路径（部分环境重启后可能失效）", err);
+                resolve(tempPath);
+              }
+            });
+          } else {
+            resolve(tempPath);
+          }
+        },
+        fail: (err) => reject(err || new Error("选择图片失败"))
+      });
+    });
+  }
   const _sfc_main$c = {
     data() {
       return {
@@ -769,7 +806,7 @@ if (uni.restoreGlobal) {
           });
           uni.navigateBack();
         }).catch((err) => {
-          formatAppLog("error", "at pages/index/add-car.vue:71", "保存失败:", err);
+          formatAppLog("error", "at pages/index/add-car.vue:72", "保存失败:", err);
           uni.showToast({
             title: "保存失败",
             icon: "none"
@@ -777,26 +814,15 @@ if (uni.restoreGlobal) {
         });
       },
       chooseImage() {
-        uni.chooseImage({
-          count: 1,
-          sizeType: ["original", "compressed"],
-          sourceType: ["album", "camera"],
-          success: (res) => {
-            const fileName = "img_" + Date.now() + ".jpg";
-            const imagePath = "static/carImgs/" + fileName;
-            this.car.imagePath = imagePath;
-            uni.showToast({
-              title: "图片选择成功",
-              icon: "success"
-            });
-          },
-          fail: (err) => {
-            formatAppLog("error", "at pages/index/add-car.vue:94", "选择图片失败:", err);
-            uni.showToast({
-              title: "选择图片失败",
-              icon: "none"
-            });
-          }
+        chooseCarPhoto().then((savedPath) => {
+          this.car.imagePath = savedPath;
+          uni.showToast({ title: "图片已保存", icon: "success" });
+        }).catch((err) => {
+          formatAppLog("error", "at pages/index/add-car.vue:86", "选择图片失败:", err);
+          uni.showToast({
+            title: err && err.errMsg ? err.errMsg : "选择图片失败",
+            icon: "none"
+          });
         });
       },
       cancel() {
@@ -870,7 +896,7 @@ if (uni.restoreGlobal) {
                 onClick: _cache[3] || (_cache[3] = (...args) => $options.chooseImage && $options.chooseImage(...args)),
                 class: "choose-image-btn"
               }, "选择图片"),
-              vue.createElementVNode("text", { class: "hint" }, "图片将保存在static/carImgs文件夹中")
+              vue.createElementVNode("text", { class: "hint" }, "选择后保存到应用本地目录，列表与编辑页可正常显示")
             ]))
           ])
         ]),
@@ -918,7 +944,7 @@ if (uni.restoreGlobal) {
             };
           }
         }).catch((err) => {
-          formatAppLog("error", "at pages/index/edit-car.vue:70", "加载车辆信息失败:", err);
+          formatAppLog("error", "at pages/index/edit-car.vue:71", "加载车辆信息失败:", err);
           this.car = {
             id: this.car.id,
             name: "大众朗逸",
@@ -944,7 +970,7 @@ if (uni.restoreGlobal) {
           });
           uni.navigateBack();
         }).catch((err) => {
-          formatAppLog("error", "at pages/index/edit-car.vue:103", "更新失败:", err);
+          formatAppLog("error", "at pages/index/edit-car.vue:104", "更新失败:", err);
           uni.showToast({
             title: "更新失败",
             icon: "none"
@@ -952,26 +978,15 @@ if (uni.restoreGlobal) {
         });
       },
       chooseImage() {
-        uni.chooseImage({
-          count: 1,
-          sizeType: ["original", "compressed"],
-          sourceType: ["album", "camera"],
-          success: (res) => {
-            const fileName = "img_" + Date.now() + ".jpg";
-            const imagePath = "static/carImgs/" + fileName;
-            this.car.imagePath = imagePath;
-            uni.showToast({
-              title: "图片选择成功",
-              icon: "success"
-            });
-          },
-          fail: (err) => {
-            formatAppLog("error", "at pages/index/edit-car.vue:126", "选择图片失败:", err);
-            uni.showToast({
-              title: "选择图片失败",
-              icon: "none"
-            });
-          }
+        chooseCarPhoto().then((savedPath) => {
+          this.car.imagePath = savedPath;
+          uni.showToast({ title: "图片已保存", icon: "success" });
+        }).catch((err) => {
+          formatAppLog("error", "at pages/index/edit-car.vue:118", "选择图片失败:", err);
+          uni.showToast({
+            title: err && err.errMsg ? err.errMsg : "选择图片失败",
+            icon: "none"
+          });
         });
       },
       cancel() {
@@ -1045,7 +1060,7 @@ if (uni.restoreGlobal) {
                 onClick: _cache[3] || (_cache[3] = (...args) => $options.chooseImage && $options.chooseImage(...args)),
                 class: "choose-image-btn"
               }, "选择图片"),
-              vue.createElementVNode("text", { class: "hint" }, "图片将保存在static/carImgs文件夹中")
+              vue.createElementVNode("text", { class: "hint" }, "选择后保存到应用本地目录，列表与编辑页可正常显示")
             ]))
           ])
         ]),
