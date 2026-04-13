@@ -3,7 +3,14 @@
 		<view class="header">
 			<text class="title">统计报表</text>
 			<view class="date-selector">
-				<picker mode="date" fields="month" @change="onDateChange" :value="selectedDate">
+				<picker
+					mode="date"
+					fields="month"
+					:value="selectedDate"
+					:start="pickerDateStart"
+					:end="pickerDateEnd"
+					@change="onDateChange"
+				>
 					<view class="picker">
 						{{ selectedDate }}
 					</view>
@@ -25,7 +32,23 @@
 			</view>
 		</view>
 		<view class="table-section">
-			<text class="section-title">按月收入统计</text>
+			<view class="section-head">
+				<text class="section-title">按月收入统计</text>
+				<view class="car-month-filter">
+					<text class="filter-label">年份</text>
+					<picker
+						mode="date"
+						fields="year"
+						:value="monthlyStatsYearPickerValue"
+						:start="pickerDateStart"
+						:end="pickerDateEnd"
+						@change="onMonthlyStatsYearChange"
+					>
+						<view class="picker car-month-picker">{{ monthlyStatsYear }}年</view>
+					</picker>
+				</view>
+			</view>
+			<text class="section-hint">仅展示所选年份内各月收入；默认当前年份，可切换查看往年。</text>
 			<view class="table-container">
 				<view class="table-header">
 					<view class="table-cell">月份</view>
@@ -35,6 +58,7 @@
 					<view class="table-cell">{{ item.month }}</view>
 					<view class="table-cell">{{ item.income }}</view>
 				</view>
+				<view v-if="monthlyData.length === 0" class="table-empty">该年暂无租赁收入数据</view>
 			</view>
 		</view>
 		<view class="table-section">
@@ -42,7 +66,14 @@
 				<text class="section-title">按车名统计</text>
 				<view class="car-month-filter">
 					<text class="filter-label">月收入月份</text>
-					<picker mode="date" fields="month" @change="onCarStatsMonthChange" :value="carStatsMonth">
+					<picker
+						mode="date"
+						fields="month"
+						:value="carStatsMonth"
+						:start="pickerDateStart"
+						:end="pickerDateEnd"
+						@change="onCarStatsMonthChange"
+					>
 						<view class="picker car-month-picker">
 							{{ carStatsMonth }}
 						</view>
@@ -80,15 +111,25 @@ function currentYearMonth() {
 export default {
 	data() {
 		const ym = currentYearMonth();
+		const y = String(new Date().getFullYear());
 		return {
+			// uni-app 部分端对 date picker 的 start/end 要求为字符串日期，避免默认成 Number 触发 Vue 校验告警
+			pickerDateStart: '1926-01-01',
+			pickerDateEnd: '2126-12-31',
 			selectedDate: ym,
 			carStatsMonth: ym,
+			monthlyStatsYear: y,
 			monthlyIncome: 0,
 			yearlyIncome: 0,
 			totalIncome: 0,
 			monthlyData: [],
 			carData: []
 		};
+	},
+	computed: {
+		monthlyStatsYearPickerValue() {
+			return `${this.monthlyStatsYear}-01-01`;
+		}
 	},
 	onLoad() {
 		this.loadStatistics();
@@ -109,6 +150,11 @@ export default {
 		onCarStatsMonthChange(e) {
 			this.carStatsMonth = e.detail.value;
 			this.loadCarData();
+		},
+		onMonthlyStatsYearChange(e) {
+			const v = e.detail.value || '';
+			this.monthlyStatsYear = v.length >= 4 ? v.substring(0, 4) : String(new Date().getFullYear());
+			this.loadMonthlyData();
 		},
 		loadStatistics() {
 			// 直接从数据库加载统计数据
@@ -146,25 +192,27 @@ export default {
 			});
 		},
 		loadMonthlyData() {
-			// 加载按月收入统计数据
+			const yearPrefix = this.monthlyStatsYear;
 			const monthlySql = `SELECT substr(startDate, 1, 7) as month, SUM(CASE WHEN changedTotalAmount IS NOT NULL THEN changedTotalAmount ELSE initialTotalAmount END) as income FROM rental GROUP BY month ORDER BY month`;
-			query(monthlySql).then(res => {
-				this.monthlyData = res.map(item => ({
-					month: item.month,
-					income: parseFloat(item.income).toFixed(2)
-				}));
-			}).catch(err => {
-				console.error('加载按月收入统计失败:', err);
-				// 加载失败时使用模拟数据
-				this.monthlyData = [
-					{ month: '2026-01', income: '3000.00' },
-					{ month: '2026-02', income: '2500.00' },
-					{ month: '2026-03', income: '4000.00' },
-					{ month: '2026-04', income: '3600.00' },
-					{ month: '2026-05', income: '4200.00' },
-					{ month: '2026-06', income: '3800.00' }
-				];
-			});
+			query(monthlySql)
+				.then(res => {
+					const rows = (res || [])
+						.filter(item => item.month && String(item.month).startsWith(yearPrefix + '-'))
+						.map(item => ({
+							month: item.month,
+							income: parseFloat(item.income).toFixed(2)
+						}));
+					this.monthlyData = rows;
+				})
+				.catch(err => {
+					console.error('加载按月收入统计失败:', err);
+					const y = yearPrefix;
+					this.monthlyData = [
+						{ month: `${y}-01`, income: '3000.00' },
+						{ month: `${y}-02`, income: '2500.00' },
+						{ month: `${y}-03`, income: '4000.00' }
+					];
+				});
 		},
 		rentalRowAmount(row) {
 			let v = row.changedTotalAmount;

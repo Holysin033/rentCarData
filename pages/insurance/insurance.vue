@@ -3,9 +3,15 @@
 		<view class="header">
 			<view class="search-box">
 				<text class="search-icon">🔍</text>
-				<input type="text" v-model="searchKeyword" placeholder="按车名搜索" class="search-input" @input="handleSearch" />
+				<input
+					type="text"
+					v-model="searchKeyword"
+					placeholder="搜索车辆名称"
+					class="search-input"
+					confirm-type="search"
+					@input="handleSearch"
+				/>
 			</view>
-			<button @click="addInsurance" class="add-btn">添加保险</button>
 		</view>
 		<view class="insurance-list">
 			<view v-for="item in filteredInsuranceList" :key="item.id" class="insurance-item">
@@ -20,6 +26,9 @@
 					<button @click="deleteInsurance(item.id)" class="delete-btn">删除</button>
 				</view>
 			</view>
+		</view>
+		<view class="fab-add fab-add-insurance" @click.stop="addInsurance">
+			<text class="fab-add-icon">+</text>
 		</view>
 	</view>
 </template>
@@ -170,7 +179,8 @@ export default {
 <style scoped>
 .container {
 	padding: 20rpx;
-	padding-top: 100rpx;
+	padding-top: 108rpx;
+	padding-bottom: calc(200rpx + env(safe-area-inset-bottom));
 }
 
 .header {
@@ -178,43 +188,63 @@ export default {
 	top: 0;
 	left: 0;
 	right: 0;
-	display: flex;
-	justify-content: space-between;
-	align-items: center;
-	padding: 20rpx;
-	background-color: #f8f8f8;
 	z-index: 999;
-	gap: 10rpx;
-	box-shadow: 0 2rpx 4rpx rgba(0, 0, 0, 0.1);
+	display: flex;
+	align-items: center;
+	padding: 16rpx 24rpx 20rpx;
+	background: linear-gradient(180deg, #ffffff 0%, #eef2f7 100%);
+	box-shadow: 0 4rpx 16rpx rgba(0, 0, 0, 0.06);
 }
 
 .search-box {
 	flex: 1;
 	display: flex;
 	align-items: center;
-	background-color: #F2F2F2;
-	border-radius: 8rpx;
-	padding: 0 15rpx;
-	height: 60rpx;
+	min-height: 72rpx;
+	padding: 0 28rpx;
+	background: #ffffff;
+	border-radius: 999rpx;
+	border: 1rpx solid rgba(175, 82, 222, 0.22);
+	box-shadow: 0 4rpx 20rpx rgba(0, 0, 0, 0.05);
+	gap: 12rpx;
 }
 
 .search-icon {
-	margin-right: 10rpx;
+	font-size: 30rpx;
+	line-height: 1;
+	opacity: 0.5;
 }
 
 .search-input {
 	flex: 1;
-	height: 100%;
-	font-size: 24rpx;
-	color: #333;
+	height: 72rpx;
+	font-size: 28rpx;
+	color: #1c1c1e;
 }
 
-.add-btn {
-	background-color: #007AFF;
-	color: white;
-	padding: 10rpx 20rpx;
-	border-radius: 8rpx;
-	white-space: nowrap;
+.fab-add {
+	position: fixed;
+	right: 32rpx;
+	bottom: calc(128rpx + env(safe-area-inset-bottom));
+	width: 112rpx;
+	height: 112rpx;
+	border-radius: 50%;
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	z-index: 998;
+}
+
+.fab-add-insurance {
+	background: linear-gradient(145deg, #af52de, #8944ab);
+	box-shadow: 0 12rpx 32rpx rgba(175, 82, 222, 0.35);
+}
+
+.fab-add-icon {
+	font-size: 56rpx;
+	color: #ffffff;
+	font-weight: 300;
+	line-height: 1;
 }
 
 .insurance-list {

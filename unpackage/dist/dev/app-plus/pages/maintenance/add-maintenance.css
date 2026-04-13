@@ -23,6 +23,14 @@
 	padding: 0.46875rem;
 	font-size: 0.75rem;
 }
+.textarea[data-v-cf4facb6] {
+	border: 0.03125rem solid #ddd;
+	border-radius: 0.25rem;
+	padding: 0.46875rem;
+	font-size: 0.75rem;
+	min-height: 3.75rem;
+	box-sizing: border-box;
+}
 .picker[data-v-cf4facb6] {
 	border: 0.03125rem solid #ddd;
 	border-radius: 0.25rem;

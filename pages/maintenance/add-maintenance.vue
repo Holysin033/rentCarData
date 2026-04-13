@@ -21,6 +21,14 @@
 				<text class="label">费用</text>
 				<input type="number" v-model="maintenance.cost" placeholder="请输入费用（元）" class="input" />
 			</view>
+			<view class="form-item">
+				<text class="label">保养里程（选填）</text>
+				<input type="number" v-model="maintenance.mileage" placeholder="不填默认为 0" class="input" />
+			</view>
+			<view class="form-item">
+				<text class="label">保养项目（选填）</text>
+				<textarea v-model="maintenance.items" placeholder="不填默认为「无」" class="textarea" />
+			</view>
 			<view class="button-group">
 				<button @click="saveMaintenance" class="save-btn">保存</button>
 				<button @click="cancel" class="cancel-btn">取消</button>
@@ -39,7 +47,9 @@ export default {
 			selectedCar: null,
 			maintenance: {
 				maintenanceDate: '',
-				cost: ''
+				cost: '',
+				mileage: '',
+				items: ''
 			}
 		};
 	},
@@ -94,6 +104,17 @@ export default {
 		onDateChange(e) {
 			this.maintenance.maintenanceDate = e.detail.value;
 		},
+		/** 未填或无效 → 0 */
+		normalizeMileage(val) {
+			if (val === '' || val === null || val === undefined) return 0;
+			const n = parseInt(String(val).trim(), 10);
+			return Number.isFinite(n) && n >= 0 ? n : 0;
+		},
+		/** 未填或空白 → 「无」 */
+		normalizeItems(val) {
+			const s = val == null ? '' : String(val).trim();
+			return s === '' ? '无' : s;
+		},
 		saveMaintenance() {
 			if (!this.selectedCar || !this.maintenance.maintenanceDate || this.maintenance.cost === '' || this.maintenance.cost === null) {
 				uni.showToast({
@@ -108,8 +129,8 @@ export default {
 				return;
 			}
 
-			const mileage = 0;
-			const items = '无';
+			const mileage = this.normalizeMileage(this.maintenance.mileage);
+			const items = this.normalizeItems(this.maintenance.items);
 
 			// 检查是否在App环境中
 			if (uni.getSystemInfoSync().platform !== 'h5') {
@@ -175,6 +196,15 @@ export default {
 	border-radius: 8rpx;
 	padding: 15rpx;
 	font-size: 24rpx;
+}
+
+.textarea {
+	border: 1rpx solid #ddd;
+	border-radius: 8rpx;
+	padding: 15rpx;
+	font-size: 24rpx;
+	min-height: 120rpx;
+	box-sizing: border-box;
 }
 
 .picker {

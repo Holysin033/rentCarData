@@ -576,7 +576,7 @@ if (uni.restoreGlobal) {
             ];
           }
         }).catch((err) => {
-          formatAppLog("error", "at pages/index/index.vue:107", "加载车辆列表失败:", err);
+          formatAppLog("error", "at pages/index/index.vue:116", "加载车辆列表失败:", err);
           this.carList = [
             {
               id: 1,
@@ -621,7 +621,7 @@ if (uni.restoreGlobal) {
                   icon: "success"
                 });
               }).catch((err) => {
-                formatAppLog("error", "at pages/index/index.vue:157", "删除失败:", err);
+                formatAppLog("error", "at pages/index/index.vue:166", "删除失败:", err);
                 this.carList = this.carList.filter((item) => item.id !== id);
                 uni.showToast({
                   title: "删除成功",
@@ -646,8 +646,9 @@ if (uni.restoreGlobal) {
             {
               type: "text",
               "onUpdate:modelValue": _cache[0] || (_cache[0] = ($event) => $data.searchKeyword = $event),
-              placeholder: "按车名搜索",
+              placeholder: "搜索车辆名称",
               class: "search-input",
+              "confirm-type": "search",
               onInput: _cache[1] || (_cache[1] = (...args) => $options.handleSearch && $options.handleSearch(...args))
             },
             null,
@@ -656,11 +657,7 @@ if (uni.restoreGlobal) {
           ), [
             [vue.vModelText, $data.searchKeyword]
           ])
-        ]),
-        vue.createElementVNode("button", {
-          onClick: _cache[2] || (_cache[2] = (...args) => $options.addCar && $options.addCar(...args)),
-          class: "add-btn"
-        }, "添加车辆")
+        ])
       ]),
       vue.createElementVNode("view", { class: "car-list" }, [
         (vue.openBlock(true), vue.createElementBlock(
@@ -726,6 +723,12 @@ if (uni.restoreGlobal) {
           128
           /* KEYED_FRAGMENT */
         ))
+      ]),
+      vue.createElementVNode("view", {
+        class: "fab-add",
+        onClick: _cache[2] || (_cache[2] = vue.withModifiers((...args) => $options.addCar && $options.addCar(...args), ["stop"]))
+      }, [
+        vue.createElementVNode("text", { class: "fab-add-icon" }, "+")
       ])
     ]);
   }
@@ -1101,7 +1104,7 @@ if (uni.restoreGlobal) {
             ];
           }
         }).catch((err) => {
-          formatAppLog("error", "at pages/insurance/insurance.vue:83", "加载保险列表失败:", err);
+          formatAppLog("error", "at pages/insurance/insurance.vue:92", "加载保险列表失败:", err);
           this.insuranceList = [
             {
               id: 1,
@@ -1160,7 +1163,7 @@ if (uni.restoreGlobal) {
                   icon: "success"
                 });
               }).catch((err) => {
-                formatAppLog("error", "at pages/insurance/insurance.vue:151", "删除失败:", err);
+                formatAppLog("error", "at pages/insurance/insurance.vue:160", "删除失败:", err);
                 this.insuranceList = this.insuranceList.filter((item) => item.id !== id);
                 uni.showToast({
                   title: "删除成功",
@@ -1185,8 +1188,9 @@ if (uni.restoreGlobal) {
             {
               type: "text",
               "onUpdate:modelValue": _cache[0] || (_cache[0] = ($event) => $data.searchKeyword = $event),
-              placeholder: "按车名搜索",
+              placeholder: "搜索车辆名称",
               class: "search-input",
+              "confirm-type": "search",
               onInput: _cache[1] || (_cache[1] = (...args) => $options.handleSearch && $options.handleSearch(...args))
             },
             null,
@@ -1195,11 +1199,7 @@ if (uni.restoreGlobal) {
           ), [
             [vue.vModelText, $data.searchKeyword]
           ])
-        ]),
-        vue.createElementVNode("button", {
-          onClick: _cache[2] || (_cache[2] = (...args) => $options.addInsurance && $options.addInsurance(...args)),
-          class: "add-btn"
-        }, "添加保险")
+        ])
       ]),
       vue.createElementVNode("view", { class: "insurance-list" }, [
         (vue.openBlock(true), vue.createElementBlock(
@@ -1255,6 +1255,12 @@ if (uni.restoreGlobal) {
           128
           /* KEYED_FRAGMENT */
         ))
+      ]),
+      vue.createElementVNode("view", {
+        class: "fab-add fab-add-insurance",
+        onClick: _cache[2] || (_cache[2] = vue.withModifiers((...args) => $options.addInsurance && $options.addInsurance(...args), ["stop"]))
+      }, [
+        vue.createElementVNode("text", { class: "fab-add-icon" }, "+")
       ])
     ]);
   }
@@ -1703,7 +1709,7 @@ if (uni.restoreGlobal) {
             ];
           }
         }).catch((err) => {
-          formatAppLog("error", "at pages/maintenance/maintenance.vue:84", "加载保养列表失败:", err);
+          formatAppLog("error", "at pages/maintenance/maintenance.vue:93", "加载保养列表失败:", err);
           this.maintenanceList = [
             {
               id: 1,
@@ -1748,7 +1754,7 @@ if (uni.restoreGlobal) {
                   icon: "success"
                 });
               }).catch((err) => {
-                formatAppLog("error", "at pages/maintenance/maintenance.vue:134", "删除失败:", err);
+                formatAppLog("error", "at pages/maintenance/maintenance.vue:143", "删除失败:", err);
                 this.maintenanceList = this.maintenanceList.filter((item) => item.id !== id);
                 uni.showToast({
                   title: "删除成功",
@@ -1773,8 +1779,9 @@ if (uni.restoreGlobal) {
             {
               type: "text",
               "onUpdate:modelValue": _cache[0] || (_cache[0] = ($event) => $data.searchKeyword = $event),
-              placeholder: "按车名搜索",
+              placeholder: "搜索车辆名称",
               class: "search-input",
+              "confirm-type": "search",
               onInput: _cache[1] || (_cache[1] = (...args) => $options.handleSearch && $options.handleSearch(...args))
             },
             null,
@@ -1783,11 +1790,7 @@ if (uni.restoreGlobal) {
           ), [
             [vue.vModelText, $data.searchKeyword]
           ])
-        ]),
-        vue.createElementVNode("button", {
-          onClick: _cache[2] || (_cache[2] = (...args) => $options.addMaintenance && $options.addMaintenance(...args)),
-          class: "add-btn"
-        }, "添加保养记录")
+        ])
       ]),
       vue.createElementVNode("view", { class: "maintenance-list" }, [
         (vue.openBlock(true), vue.createElementBlock(
@@ -1850,6 +1853,12 @@ if (uni.restoreGlobal) {
           128
           /* KEYED_FRAGMENT */
         ))
+      ]),
+      vue.createElementVNode("view", {
+        class: "fab-add fab-add-maintenance",
+        onClick: _cache[2] || (_cache[2] = vue.withModifiers((...args) => $options.addMaintenance && $options.addMaintenance(...args), ["stop"]))
+      }, [
+        vue.createElementVNode("text", { class: "fab-add-icon" }, "+")
       ])
     ]);
   }
@@ -1862,7 +1871,9 @@ if (uni.restoreGlobal) {
         selectedCar: null,
         maintenance: {
           maintenanceDate: "",
-          cost: ""
+          cost: "",
+          mileage: "",
+          items: ""
         }
       };
     },
@@ -1879,7 +1890,7 @@ if (uni.restoreGlobal) {
               this.selectedCar = this.carList[0];
             }
           }).catch((err) => {
-            formatAppLog("error", "at pages/maintenance/add-maintenance.vue:61", "加载车辆列表失败:", err);
+            formatAppLog("error", "at pages/maintenance/add-maintenance.vue:71", "加载车辆列表失败:", err);
             this.carList = [
               {
                 id: 1,
@@ -1913,6 +1924,18 @@ if (uni.restoreGlobal) {
       onDateChange(e) {
         this.maintenance.maintenanceDate = e.detail.value;
       },
+      /** 未填或无效 → 0 */
+      normalizeMileage(val) {
+        if (val === "" || val === null || val === void 0)
+          return 0;
+        const n = parseInt(String(val).trim(), 10);
+        return Number.isFinite(n) && n >= 0 ? n : 0;
+      },
+      /** 未填或空白 → 「无」 */
+      normalizeItems(val) {
+        const s = val == null ? "" : String(val).trim();
+        return s === "" ? "无" : s;
+      },
       saveMaintenance() {
         if (!this.selectedCar || !this.maintenance.maintenanceDate || this.maintenance.cost === "" || this.maintenance.cost === null) {
           uni.showToast({
@@ -1926,8 +1949,8 @@ if (uni.restoreGlobal) {
           uni.showToast({ title: "费用请输入有效数字", icon: "none" });
           return;
         }
-        const mileage = 0;
-        const items = "无";
+        const mileage = this.normalizeMileage(this.maintenance.mileage);
+        const items = this.normalizeItems(this.maintenance.items);
         if (uni.getSystemInfoSync().platform !== "h5") {
           const sql = `INSERT INTO maintenance (carId, carName, maintenanceDate, mileage, cost, items, createdAt) VALUES (?, ?, ?, ?, ?, ?, ?)`;
           const params = [this.selectedCar.id, this.selectedCar.name, this.maintenance.maintenanceDate, mileage, costNum, items, (/* @__PURE__ */ new Date()).toISOString()];
@@ -1938,7 +1961,7 @@ if (uni.restoreGlobal) {
             });
             uni.navigateBack();
           }).catch((err) => {
-            formatAppLog("error", "at pages/maintenance/add-maintenance.vue:128", "保存失败:", err);
+            formatAppLog("error", "at pages/maintenance/add-maintenance.vue:149", "保存失败:", err);
             uni.showToast({
               title: "保存失败",
               icon: "none"
@@ -2011,13 +2034,46 @@ if (uni.restoreGlobal) {
             [vue.vModelText, $data.maintenance.cost]
           ])
         ]),
+        vue.createElementVNode("view", { class: "form-item" }, [
+          vue.createElementVNode("text", { class: "label" }, "保养里程（选填）"),
+          vue.withDirectives(vue.createElementVNode(
+            "input",
+            {
+              type: "number",
+              "onUpdate:modelValue": _cache[3] || (_cache[3] = ($event) => $data.maintenance.mileage = $event),
+              placeholder: "不填默认为 0",
+              class: "input"
+            },
+            null,
+            512
+            /* NEED_PATCH */
+          ), [
+            [vue.vModelText, $data.maintenance.mileage]
+          ])
+        ]),
+        vue.createElementVNode("view", { class: "form-item" }, [
+          vue.createElementVNode("text", { class: "label" }, "保养项目（选填）"),
+          vue.withDirectives(vue.createElementVNode(
+            "textarea",
+            {
+              "onUpdate:modelValue": _cache[4] || (_cache[4] = ($event) => $data.maintenance.items = $event),
+              placeholder: "不填默认为「无」",
+              class: "textarea"
+            },
+            null,
+            512
+            /* NEED_PATCH */
+          ), [
+            [vue.vModelText, $data.maintenance.items]
+          ])
+        ]),
         vue.createElementVNode("view", { class: "button-group" }, [
           vue.createElementVNode("button", {
-            onClick: _cache[3] || (_cache[3] = (...args) => $options.saveMaintenance && $options.saveMaintenance(...args)),
+            onClick: _cache[5] || (_cache[5] = (...args) => $options.saveMaintenance && $options.saveMaintenance(...args)),
             class: "save-btn"
           }, "保存"),
           vue.createElementVNode("button", {
-            onClick: _cache[4] || (_cache[4] = (...args) => $options.cancel && $options.cancel(...args)),
+            onClick: _cache[6] || (_cache[6] = (...args) => $options.cancel && $options.cancel(...args)),
             class: "cancel-btn"
           }, "取消")
         ])
@@ -2034,7 +2090,9 @@ if (uni.restoreGlobal) {
         maintenance: {
           id: "",
           maintenanceDate: "",
-          cost: ""
+          cost: "",
+          mileage: "",
+          items: ""
         }
       };
     },
@@ -2050,7 +2108,7 @@ if (uni.restoreGlobal) {
           query(sql).then((res) => {
             this.carList = res || [];
           }).catch((err) => {
-            formatAppLog("error", "at pages/maintenance/edit-maintenance.vue:61", "加载车辆列表失败:", err);
+            formatAppLog("error", "at pages/maintenance/edit-maintenance.vue:71", "加载车辆列表失败:", err);
             this.carList = [
               {
                 id: 1,
@@ -2081,10 +2139,14 @@ if (uni.restoreGlobal) {
           query(sql, [this.maintenance.id]).then((res) => {
             if (res && res.length > 0) {
               const row = res[0];
+              const m = row.mileage != null ? Number(row.mileage) : 0;
+              const it = row.items != null ? String(row.items) : "";
               this.maintenance = {
                 id: row.id,
                 maintenanceDate: row.maintenanceDate || "",
-                cost: row.cost != null ? row.cost : ""
+                cost: row.cost != null ? row.cost : "",
+                mileage: m !== 0 ? String(m) : "",
+                items: it && it !== "无" ? it : ""
               };
               const carIndex = this.carList.findIndex((car) => car.id === row.carId);
               if (carIndex !== -1) {
@@ -2093,11 +2155,13 @@ if (uni.restoreGlobal) {
               }
             }
           }).catch((err) => {
-            formatAppLog("error", "at pages/maintenance/edit-maintenance.vue:108", "加载保养信息失败:", err);
+            formatAppLog("error", "at pages/maintenance/edit-maintenance.vue:122", "加载保养信息失败:", err);
             this.maintenance = {
               id: this.maintenance.id,
               maintenanceDate: "2026-03-15",
-              cost: 800
+              cost: 800,
+              mileage: "10000",
+              items: "机油更换"
             };
             this.selectedCar = this.carList[0];
           });
@@ -2105,7 +2169,9 @@ if (uni.restoreGlobal) {
           this.maintenance = {
             id: this.maintenance.id,
             maintenanceDate: "2026-03-15",
-            cost: 800
+            cost: 800,
+            mileage: "10000",
+            items: "机油更换"
           };
           this.selectedCar = this.carList[0];
         }
@@ -2116,6 +2182,16 @@ if (uni.restoreGlobal) {
       },
       onDateChange(e) {
         this.maintenance.maintenanceDate = e.detail.value;
+      },
+      normalizeMileage(val) {
+        if (val === "" || val === null || val === void 0)
+          return 0;
+        const n = parseInt(String(val).trim(), 10);
+        return Number.isFinite(n) && n >= 0 ? n : 0;
+      },
+      normalizeItems(val) {
+        const s = val == null ? "" : String(val).trim();
+        return s === "" ? "无" : s;
       },
       updateMaintenance() {
         if (!this.selectedCar || !this.maintenance.maintenanceDate || this.maintenance.cost === "" || this.maintenance.cost === null) {
@@ -2130,9 +2206,19 @@ if (uni.restoreGlobal) {
           uni.showToast({ title: "费用请输入有效数字", icon: "none" });
           return;
         }
+        const mileage = this.normalizeMileage(this.maintenance.mileage);
+        const items = this.normalizeItems(this.maintenance.items);
         if (uni.getSystemInfoSync().platform !== "h5") {
-          const sql = `UPDATE maintenance SET carId = ?, carName = ?, maintenanceDate = ?, cost = ? WHERE id = ?`;
-          const params = [this.selectedCar.id, this.selectedCar.name, this.maintenance.maintenanceDate, costNum, this.maintenance.id];
+          const sql = `UPDATE maintenance SET carId = ?, carName = ?, maintenanceDate = ?, mileage = ?, cost = ?, items = ? WHERE id = ?`;
+          const params = [
+            this.selectedCar.id,
+            this.selectedCar.name,
+            this.maintenance.maintenanceDate,
+            mileage,
+            costNum,
+            items,
+            this.maintenance.id
+          ];
           executeSql(sql, params).then(() => {
             uni.showToast({
               title: "更新成功",
@@ -2140,7 +2226,7 @@ if (uni.restoreGlobal) {
             });
             uni.navigateBack();
           }).catch((err) => {
-            formatAppLog("error", "at pages/maintenance/edit-maintenance.vue:160", "更新失败:", err);
+            formatAppLog("error", "at pages/maintenance/edit-maintenance.vue:197", "更新失败:", err);
             uni.showToast({
               title: "更新失败",
               icon: "none"
@@ -2213,13 +2299,46 @@ if (uni.restoreGlobal) {
             [vue.vModelText, $data.maintenance.cost]
           ])
         ]),
+        vue.createElementVNode("view", { class: "form-item" }, [
+          vue.createElementVNode("text", { class: "label" }, "保养里程（选填）"),
+          vue.withDirectives(vue.createElementVNode(
+            "input",
+            {
+              type: "number",
+              "onUpdate:modelValue": _cache[3] || (_cache[3] = ($event) => $data.maintenance.mileage = $event),
+              placeholder: "不填默认为 0",
+              class: "input"
+            },
+            null,
+            512
+            /* NEED_PATCH */
+          ), [
+            [vue.vModelText, $data.maintenance.mileage]
+          ])
+        ]),
+        vue.createElementVNode("view", { class: "form-item" }, [
+          vue.createElementVNode("text", { class: "label" }, "保养项目（选填）"),
+          vue.withDirectives(vue.createElementVNode(
+            "textarea",
+            {
+              "onUpdate:modelValue": _cache[4] || (_cache[4] = ($event) => $data.maintenance.items = $event),
+              placeholder: "不填默认为「无」",
+              class: "textarea"
+            },
+            null,
+            512
+            /* NEED_PATCH */
+          ), [
+            [vue.vModelText, $data.maintenance.items]
+          ])
+        ]),
         vue.createElementVNode("view", { class: "button-group" }, [
           vue.createElementVNode("button", {
-            onClick: _cache[3] || (_cache[3] = (...args) => $options.updateMaintenance && $options.updateMaintenance(...args)),
+            onClick: _cache[5] || (_cache[5] = (...args) => $options.updateMaintenance && $options.updateMaintenance(...args)),
             class: "save-btn"
           }, "保存"),
           vue.createElementVNode("button", {
-            onClick: _cache[4] || (_cache[4] = (...args) => $options.cancel && $options.cancel(...args)),
+            onClick: _cache[6] || (_cache[6] = (...args) => $options.cancel && $options.cancel(...args)),
             class: "cancel-btn"
           }, "取消")
         ])
@@ -2293,7 +2412,7 @@ if (uni.restoreGlobal) {
             ];
           }
         }).catch((err) => {
-          formatAppLog("error", "at pages/rental/rental.vue:142", "加载租赁列表失败:", err);
+          formatAppLog("error", "at pages/rental/rental.vue:150", "加载租赁列表失败:", err);
           this.rentalList = [
             {
               id: 1,
@@ -2354,7 +2473,7 @@ if (uni.restoreGlobal) {
                     icon: "success"
                   });
                 }).catch((err) => {
-                  formatAppLog("error", "at pages/rental/rental.vue:212", "删除失败:", err);
+                  formatAppLog("error", "at pages/rental/rental.vue:220", "删除失败:", err);
                   this.rentalList = this.rentalList.filter((item) => item.id !== id);
                   uni.showToast({
                     title: "删除成功",
@@ -2420,7 +2539,7 @@ if (uni.restoreGlobal) {
                   icon: "success"
                 });
               }).catch((err) => {
-                formatAppLog("error", "at pages/rental/rental.vue:287", "续租失败:", err);
+                formatAppLog("error", "at pages/rental/rental.vue:295", "续租失败:", err);
                 uni.showToast({
                   title: "续租失败",
                   icon: "error"
@@ -2466,7 +2585,7 @@ if (uni.restoreGlobal) {
                   icon: "success"
                 });
               }).catch((err) => {
-                formatAppLog("error", "at pages/rental/rental.vue:340", "退租失败:", err);
+                formatAppLog("error", "at pages/rental/rental.vue:348", "退租失败:", err);
                 uni.showToast({
                   title: "退租失败",
                   icon: "error"
@@ -2495,7 +2614,7 @@ if (uni.restoreGlobal) {
                   icon: "success"
                 });
               }).catch((err) => {
-                formatAppLog("error", "at pages/rental/rental.vue:371", "完成租约失败:", err);
+                formatAppLog("error", "at pages/rental/rental.vue:379", "完成租约失败:", err);
                 uni.showToast({
                   title: "完成租约失败",
                   icon: "error"
@@ -2565,8 +2684,9 @@ if (uni.restoreGlobal) {
             {
               type: "text",
               "onUpdate:modelValue": _cache[0] || (_cache[0] = ($event) => $data.searchKeyword = $event),
-              placeholder: "按车名搜索",
+              placeholder: "搜索车辆名称",
               class: "search-input",
+              "confirm-type": "search",
               onInput: _cache[1] || (_cache[1] = (...args) => $options.handleSearch && $options.handleSearch(...args))
             },
             null,
@@ -2575,11 +2695,7 @@ if (uni.restoreGlobal) {
           ), [
             [vue.vModelText, $data.searchKeyword]
           ])
-        ]),
-        vue.createElementVNode("button", {
-          onClick: _cache[2] || (_cache[2] = (...args) => $options.addRental && $options.addRental(...args)),
-          class: "add-btn"
-        }, "添加租赁记录")
+        ])
       ]),
       vue.createElementVNode("view", { class: "tab-section" }, [
         (vue.openBlock(true), vue.createElementBlock(
@@ -2614,10 +2730,10 @@ if (uni.restoreGlobal) {
                 ]),
                 vue.createElementVNode("view", {
                   class: "item-content",
-                  onTouchstart: _cache[3] || (_cache[3] = (...args) => $options.touchStart && $options.touchStart(...args)),
-                  onTouchmove: _cache[4] || (_cache[4] = (...args) => $options.touchMove && $options.touchMove(...args)),
-                  onTouchend: _cache[5] || (_cache[5] = (...args) => $options.touchEnd && $options.touchEnd(...args)),
-                  onClick: _cache[6] || (_cache[6] = vue.withModifiers(() => {
+                  onTouchstart: _cache[2] || (_cache[2] = (...args) => $options.touchStart && $options.touchStart(...args)),
+                  onTouchmove: _cache[3] || (_cache[3] = (...args) => $options.touchMove && $options.touchMove(...args)),
+                  onTouchend: _cache[4] || (_cache[4] = (...args) => $options.touchEnd && $options.touchEnd(...args)),
+                  onClick: _cache[5] || (_cache[5] = vue.withModifiers(() => {
                   }, ["stop"])),
                   "data-id": item.id,
                   style: vue.normalizeStyle({
@@ -2716,6 +2832,12 @@ if (uni.restoreGlobal) {
           128
           /* KEYED_FRAGMENT */
         ))
+      ]),
+      vue.createElementVNode("view", {
+        class: "fab-add fab-add-rental",
+        onClick: _cache[6] || (_cache[6] = vue.withModifiers((...args) => $options.addRental && $options.addRental(...args), ["stop"]))
+      }, [
+        vue.createElementVNode("text", { class: "fab-add-icon" }, "+")
       ])
     ]);
   }
@@ -3506,15 +3628,25 @@ if (uni.restoreGlobal) {
   const _sfc_main$1 = {
     data() {
       const ym = currentYearMonth();
+      const y = String((/* @__PURE__ */ new Date()).getFullYear());
       return {
+        // uni-app 部分端对 date picker 的 start/end 要求为字符串日期，避免默认成 Number 触发 Vue 校验告警
+        pickerDateStart: "1926-01-01",
+        pickerDateEnd: "2126-12-31",
         selectedDate: ym,
         carStatsMonth: ym,
+        monthlyStatsYear: y,
         monthlyIncome: 0,
         yearlyIncome: 0,
         totalIncome: 0,
         monthlyData: [],
         carData: []
       };
+    },
+    computed: {
+      monthlyStatsYearPickerValue() {
+        return `${this.monthlyStatsYear}-01-01`;
+      }
     },
     onLoad() {
       this.loadStatistics();
@@ -3535,12 +3667,17 @@ if (uni.restoreGlobal) {
         this.carStatsMonth = e.detail.value;
         this.loadCarData();
       },
+      onMonthlyStatsYearChange(e) {
+        const v = e.detail.value || "";
+        this.monthlyStatsYear = v.length >= 4 ? v.substring(0, 4) : String((/* @__PURE__ */ new Date()).getFullYear());
+        this.loadMonthlyData();
+      },
       loadStatistics() {
         const monthlySql = `SELECT SUM(CASE WHEN changedTotalAmount IS NOT NULL THEN changedTotalAmount ELSE initialTotalAmount END) as total FROM rental WHERE substr(startDate, 1, 7) = ?`;
         query(monthlySql, [this.selectedDate]).then((res) => {
           this.monthlyIncome = res && res[0] && res[0].total ? parseFloat(res[0].total).toFixed(2) : 0;
         }).catch((err) => {
-          formatAppLog("error", "at pages/statistics/statistics.vue:122", "加载月度租赁收入失败:", err);
+          formatAppLog("error", "at pages/statistics/statistics.vue:168", "加载月度租赁收入失败:", err);
           this.monthlyIncome = "3600.00";
         });
         const year = this.selectedDate.substring(0, 4);
@@ -3548,33 +3685,33 @@ if (uni.restoreGlobal) {
         query(yearlySql, [year]).then((res) => {
           this.yearlyIncome = res && res[0] && res[0].total ? parseFloat(res[0].total).toFixed(2) : 0;
         }).catch((err) => {
-          formatAppLog("error", "at pages/statistics/statistics.vue:133", "加载年度租赁收入失败:", err);
+          formatAppLog("error", "at pages/statistics/statistics.vue:179", "加载年度租赁收入失败:", err);
           this.yearlyIncome = "43200.00";
         });
         const totalSql = `SELECT SUM(CASE WHEN changedTotalAmount IS NOT NULL THEN changedTotalAmount ELSE initialTotalAmount END) as total FROM rental`;
         query(totalSql).then((res) => {
           this.totalIncome = res && res[0] && res[0].total ? parseFloat(res[0].total).toFixed(2) : 0;
         }).catch((err) => {
-          formatAppLog("error", "at pages/statistics/statistics.vue:143", "加载总租赁收入失败:", err);
+          formatAppLog("error", "at pages/statistics/statistics.vue:189", "加载总租赁收入失败:", err);
           this.totalIncome = "43200.00";
         });
       },
       loadMonthlyData() {
+        const yearPrefix = this.monthlyStatsYear;
         const monthlySql = `SELECT substr(startDate, 1, 7) as month, SUM(CASE WHEN changedTotalAmount IS NOT NULL THEN changedTotalAmount ELSE initialTotalAmount END) as income FROM rental GROUP BY month ORDER BY month`;
         query(monthlySql).then((res) => {
-          this.monthlyData = res.map((item) => ({
+          const rows = (res || []).filter((item) => item.month && String(item.month).startsWith(yearPrefix + "-")).map((item) => ({
             month: item.month,
             income: parseFloat(item.income).toFixed(2)
           }));
+          this.monthlyData = rows;
         }).catch((err) => {
-          formatAppLog("error", "at pages/statistics/statistics.vue:157", "加载按月收入统计失败:", err);
+          formatAppLog("error", "at pages/statistics/statistics.vue:208", "加载按月收入统计失败:", err);
+          const y = yearPrefix;
           this.monthlyData = [
-            { month: "2026-01", income: "3000.00" },
-            { month: "2026-02", income: "2500.00" },
-            { month: "2026-03", income: "4000.00" },
-            { month: "2026-04", income: "3600.00" },
-            { month: "2026-05", income: "4200.00" },
-            { month: "2026-06", income: "3800.00" }
+            { month: `${y}-01`, income: "3000.00" },
+            { month: `${y}-02`, income: "2500.00" },
+            { month: `${y}-03`, income: "4000.00" }
           ];
         });
       },
@@ -3614,7 +3751,7 @@ if (uni.restoreGlobal) {
             yearIncome: (yearMap[carName] || 0).toFixed(2)
           })).sort((a, b) => parseFloat(b.monthIncome) - parseFloat(a.monthIncome));
         }).catch((err) => {
-          formatAppLog("error", "at pages/statistics/statistics.vue:207", "加载按车名统计失败:", err);
+          formatAppLog("error", "at pages/statistics/statistics.vue:255", "加载按车名统计失败:", err);
           this.carData = [
             { carName: "大众朗逸", monthIncome: "1200.00", yearIncome: "18000.00" },
             { carName: "丰田凯美瑞", monthIncome: "800.00", yearIncome: "15000.00" },
@@ -3632,8 +3769,10 @@ if (uni.restoreGlobal) {
           vue.createElementVNode("picker", {
             mode: "date",
             fields: "month",
-            onChange: _cache[0] || (_cache[0] = (...args) => $options.onDateChange && $options.onDateChange(...args)),
-            value: $data.selectedDate
+            value: $data.selectedDate,
+            start: $data.pickerDateStart,
+            end: $data.pickerDateEnd,
+            onChange: _cache[0] || (_cache[0] = (...args) => $options.onDateChange && $options.onDateChange(...args))
           }, [
             vue.createElementVNode(
               "view",
@@ -3642,7 +3781,7 @@ if (uni.restoreGlobal) {
               1
               /* TEXT */
             )
-          ], 40, ["value"])
+          ], 40, ["value", "start", "end"])
         ])
       ]),
       vue.createElementVNode("view", { class: "stats-card" }, [
@@ -3678,7 +3817,29 @@ if (uni.restoreGlobal) {
         ])
       ]),
       vue.createElementVNode("view", { class: "table-section" }, [
-        vue.createElementVNode("text", { class: "section-title" }, "按月收入统计"),
+        vue.createElementVNode("view", { class: "section-head" }, [
+          vue.createElementVNode("text", { class: "section-title" }, "按月收入统计"),
+          vue.createElementVNode("view", { class: "car-month-filter" }, [
+            vue.createElementVNode("text", { class: "filter-label" }, "年份"),
+            vue.createElementVNode("picker", {
+              mode: "date",
+              fields: "year",
+              value: $options.monthlyStatsYearPickerValue,
+              start: $data.pickerDateStart,
+              end: $data.pickerDateEnd,
+              onChange: _cache[1] || (_cache[1] = (...args) => $options.onMonthlyStatsYearChange && $options.onMonthlyStatsYearChange(...args))
+            }, [
+              vue.createElementVNode(
+                "view",
+                { class: "picker car-month-picker" },
+                vue.toDisplayString($data.monthlyStatsYear) + "年",
+                1
+                /* TEXT */
+              )
+            ], 40, ["value", "start", "end"])
+          ])
+        ]),
+        vue.createElementVNode("text", { class: "section-hint" }, "仅展示所选年份内各月收入；默认当前年份，可切换查看往年。"),
         vue.createElementVNode("view", { class: "table-container" }, [
           vue.createElementVNode("view", { class: "table-header" }, [
             vue.createElementVNode("view", { class: "table-cell" }, "月份"),
@@ -3710,7 +3871,11 @@ if (uni.restoreGlobal) {
             }),
             128
             /* KEYED_FRAGMENT */
-          ))
+          )),
+          $data.monthlyData.length === 0 ? (vue.openBlock(), vue.createElementBlock("view", {
+            key: 0,
+            class: "table-empty"
+          }, "该年暂无租赁收入数据")) : vue.createCommentVNode("v-if", true)
         ])
       ]),
       vue.createElementVNode("view", { class: "table-section" }, [
@@ -3721,8 +3886,10 @@ if (uni.restoreGlobal) {
             vue.createElementVNode("picker", {
               mode: "date",
               fields: "month",
-              onChange: _cache[1] || (_cache[1] = (...args) => $options.onCarStatsMonthChange && $options.onCarStatsMonthChange(...args)),
-              value: $data.carStatsMonth
+              value: $data.carStatsMonth,
+              start: $data.pickerDateStart,
+              end: $data.pickerDateEnd,
+              onChange: _cache[2] || (_cache[2] = (...args) => $options.onCarStatsMonthChange && $options.onCarStatsMonthChange(...args))
             }, [
               vue.createElementVNode(
                 "view",
@@ -3731,7 +3898,7 @@ if (uni.restoreGlobal) {
                 1
                 /* TEXT */
               )
-            ], 40, ["value"])
+            ], 40, ["value", "start", "end"])
           ])
         ]),
         vue.createElementVNode("text", { class: "section-hint" }, "年收入为「所选月份」所在自然年的累计（例：选 2026-05 则年收入为 2026 全年）。"),

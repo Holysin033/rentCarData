@@ -21,6 +21,14 @@
 				<text class="label">费用</text>
 				<input type="number" v-model="maintenance.cost" placeholder="请输入费用（元）" class="input" />
 			</view>
+			<view class="form-item">
+				<text class="label">保养里程（选填）</text>
+				<input type="number" v-model="maintenance.mileage" placeholder="不填默认为 0" class="input" />
+			</view>
+			<view class="form-item">
+				<text class="label">保养项目（选填）</text>
+				<textarea v-model="maintenance.items" placeholder="不填默认为「无」" class="textarea" />
+			</view>
 			<view class="button-group">
 				<button @click="updateMaintenance" class="save-btn">保存</button>
 				<button @click="cancel" class="cancel-btn">取消</button>
@@ -40,7 +48,9 @@ export default {
 			maintenance: {
 				id: '',
 				maintenanceDate: '',
-				cost: ''
+				cost: '',
+				mileage: '',
+				items: ''
 			}
 		};
 	},
@@ -93,10 +103,14 @@ export default {
 				query(sql, [this.maintenance.id]).then(res => {
 					if (res && res.length > 0) {
 						const row = res[0];
+						const m = row.mileage != null ? Number(row.mileage) : 0;
+						const it = row.items != null ? String(row.items) : '';
 						this.maintenance = {
 							id: row.id,
 							maintenanceDate: row.maintenanceDate || '',
-							cost: row.cost != null ? row.cost : ''
+							cost: row.cost != null ? row.cost : '',
+							mileage: m !== 0 ? String(m) : '',
+							items: it && it !== '无' ? it : ''
 						};
 						const carIndex = this.carList.findIndex(car => car.id === row.carId);
 						if (carIndex !== -1) {
@@ -109,7 +123,9 @@ export default {
 					this.maintenance = {
 						id: this.maintenance.id,
 						maintenanceDate: '2026-03-15',
-						cost: 800
+						cost: 800,
+						mileage: '10000',
+						items: '机油更换'
 					};
 					this.selectedCar = this.carList[0];
 				});
@@ -117,7 +133,9 @@ export default {
 				this.maintenance = {
 					id: this.maintenance.id,
 					maintenanceDate: '2026-03-15',
-					cost: 800
+					cost: 800,
+					mileage: '10000',
+					items: '机油更换'
 				};
 				this.selectedCar = this.carList[0];
 			}
@@ -128,6 +146,15 @@ export default {
 		},
 		onDateChange(e) {
 			this.maintenance.maintenanceDate = e.detail.value;
+		},
+		normalizeMileage(val) {
+			if (val === '' || val === null || val === undefined) return 0;
+			const n = parseInt(String(val).trim(), 10);
+			return Number.isFinite(n) && n >= 0 ? n : 0;
+		},
+		normalizeItems(val) {
+			const s = val == null ? '' : String(val).trim();
+			return s === '' ? '无' : s;
 		},
 		updateMaintenance() {
 			if (!this.selectedCar || !this.maintenance.maintenanceDate || this.maintenance.cost === '' || this.maintenance.cost === null) {
@@ -143,11 +170,21 @@ export default {
 				return;
 			}
 
+			const mileage = this.normalizeMileage(this.maintenance.mileage);
+			const items = this.normalizeItems(this.maintenance.items);
+
 			// 检查是否在App环境中
 			if (uni.getSystemInfoSync().platform !== 'h5') {
-				// 仅更新表单可见字段，保留库中原有里程、保养项目
-				const sql = `UPDATE maintenance SET carId = ?, carName = ?, maintenanceDate = ?, cost = ? WHERE id = ?`;
-				const params = [this.selectedCar.id, this.selectedCar.name, this.maintenance.maintenanceDate, costNum, this.maintenance.id];
+				const sql = `UPDATE maintenance SET carId = ?, carName = ?, maintenanceDate = ?, mileage = ?, cost = ?, items = ? WHERE id = ?`;
+				const params = [
+					this.selectedCar.id,
+					this.selectedCar.name,
+					this.maintenance.maintenanceDate,
+					mileage,
+					costNum,
+					items,
+					this.maintenance.id
+				];
 
 				executeSql(sql, params).then(() => {
 					uni.showToast({
@@ -207,6 +244,15 @@ export default {
 	border-radius: 8rpx;
 	padding: 15rpx;
 	font-size: 24rpx;
+}
+
+.textarea {
+	border: 1rpx solid #ddd;
+	border-radius: 8rpx;
+	padding: 15rpx;
+	font-size: 24rpx;
+	min-height: 120rpx;
+	box-sizing: border-box;
 }
 
 .picker {
