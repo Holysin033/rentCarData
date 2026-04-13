@@ -12,9 +12,19 @@
 	z-index: 999;
 	display: flex;
 	align-items: center;
+	gap: 0.5rem;
 	padding: 0.5rem 0.75rem 0.625rem;
 	background: linear-gradient(180deg, #ffffff 0%, #eef2f7 100%);
 	box-shadow: 0 0.125rem 0.5rem rgba(0, 0, 0, 0.06);
+}
+.header-export[data-v-c7393d3c] {
+	flex-shrink: 0;
+	padding: 0.4375rem 0.6875rem;
+	font-size: 0.8125rem;
+	font-weight: 600;
+	color: #248a3d;
+	background: rgba(52, 199, 89, 0.12);
+	border-radius: 31.21875rem;
 }
 .search-box[data-v-c7393d3c] {
 	flex: 1;

@@ -12,6 +12,7 @@
 					@input="handleSearch"
 				/>
 			</view>
+			<view class="header-export" @click.stop="onBackupTap">备份</view>
 		</view>
 		<view class="tab-section">
 			<view v-for="(option, index) in statusOptions" :key="index" class="tab-item"
@@ -73,6 +74,7 @@
 
 <script>
 import { query, executeSql } from '../../utils/db.js';
+import { exportRentalBackup, importRentalBackup, pickAndReadJsonFile } from '../../utils/rentalBackup.js';
 export default {
 	data() {
 		return {
@@ -181,6 +183,78 @@ export default {
 			// 跳转到添加租赁记录页面
 			uni.navigateTo({
 				url: './add-rental'
+			});
+		},
+		onBackupTap() {
+			uni.showActionSheet({
+				itemList: ['导出租约备份', '导入租约备份'],
+				success: (res) => {
+					if (res.tapIndex === 0) {
+						this.doExportRentalBackup();
+					} else if (res.tapIndex === 1) {
+						this.doImportRentalBackup();
+					}
+				}
+			});
+		},
+		doExportRentalBackup() {
+			uni.showLoading({ title: '导出中…', mask: true });
+			exportRentalBackup()
+				.then((info) => {
+					uni.hideLoading();
+					const msg = `共 ${info.rowCount} 条租约\n${info.filePath}\n\n${info.hint || ''}`;
+					uni.showModal({
+						title: '租约已导出',
+						content: msg,
+						showCancel: false
+					});
+				})
+				.catch((err) => {
+					console.error('导出租约失败:', err);
+					uni.hideLoading();
+					uni.showToast({
+						title: err && err.message ? err.message : '导出失败',
+						icon: 'none',
+						duration: 2500
+					});
+				});
+		},
+		doImportRentalBackup() {
+			uni.showModal({
+				title: '确认导入',
+				content: '导入将清空当前所有租约，并以备份文件中的数据完全替换。是否继续？',
+				success: (modalRes) => {
+					if (!modalRes.confirm) {
+						return;
+					}
+					pickAndReadJsonFile()
+						.then((text) => {
+							uni.showLoading({ title: '导入中…', mask: true });
+							return importRentalBackup(text);
+						})
+						.then((info) => {
+							uni.hideLoading();
+							this.loadRentalList();
+							uni.showModal({
+								title: '导入成功',
+								content: `已写入 ${info.rowCount} 条租约`,
+								showCancel: false
+							});
+						})
+						.catch((err) => {
+							console.error('导入租约失败:', err);
+							uni.hideLoading();
+							const msg = err && err.message ? err.message : '导入失败';
+							if (msg === '已取消') {
+								return;
+							}
+							uni.showToast({
+								title: msg,
+								icon: 'none',
+								duration: 2800
+							});
+						});
+				}
 			});
 		},
 		editRental(item) {
@@ -463,9 +537,20 @@ export default {
 	z-index: 999;
 	display: flex;
 	align-items: center;
+	gap: 16rpx;
 	padding: 16rpx 24rpx 20rpx;
 	background: linear-gradient(180deg, #ffffff 0%, #eef2f7 100%);
 	box-shadow: 0 4rpx 16rpx rgba(0, 0, 0, 0.06);
+}
+
+.header-export {
+	flex-shrink: 0;
+	padding: 14rpx 22rpx;
+	font-size: 26rpx;
+	font-weight: 600;
+	color: #248a3d;
+	background: rgba(52, 199, 89, 0.12);
+	border-radius: 999rpx;
 }
 
 .search-box {

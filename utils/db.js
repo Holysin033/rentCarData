@@ -392,7 +392,7 @@ function executeIndexedDb(sql, params) {
 						}
 					});
 
-					const request = store.add(item);
+					const request = store.put(item);
 					request.onsuccess = function () {
 						resolve({ affectedRows: 1 });
 					};
@@ -443,7 +443,6 @@ function executeIndexedDb(sql, params) {
 					reject('无效的UPDATE语句');
 				}
 			} else if (operation === 'delete') {
-				// 简化处理，假设删除操作是基于id
 				const idMatch = sql.match(/WHERE\s+id\s*=\s*\?/i);
 				if (idMatch && params.length > 0) {
 					const id = params[0];
@@ -452,6 +451,14 @@ function executeIndexedDb(sql, params) {
 						resolve({ affectedRows: 1 });
 					};
 					request.onerror = function (event) {
+						reject(event.target.error);
+					};
+				} else if (/^\s*delete\s+from\s+\w+\s*;?\s*$/i.test(sql.trim())) {
+					const clearReq = store.clear();
+					clearReq.onsuccess = function () {
+						resolve({ affectedRows: 1 });
+					};
+					clearReq.onerror = function (event) {
 						reject(event.target.error);
 					};
 				} else {

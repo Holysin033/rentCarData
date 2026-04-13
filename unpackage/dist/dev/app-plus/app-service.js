@@ -325,7 +325,7 @@ if (uni.restoreGlobal) {
                 item[field] = values[index];
               }
             });
-            const request = store.add(item);
+            const request = store.put(item);
             request.onsuccess = function() {
               resolve({ affectedRows: 1 });
             };
@@ -379,6 +379,14 @@ if (uni.restoreGlobal) {
               resolve({ affectedRows: 1 });
             };
             request.onerror = function(event) {
+              reject(event.target.error);
+            };
+          } else if (/^\s*delete\s+from\s+\w+\s*;?\s*$/i.test(sql.trim())) {
+            const clearReq = store.clear();
+            clearReq.onsuccess = function() {
+              resolve({ affectedRows: 1 });
+            };
+            clearReq.onerror = function(event) {
               reject(event.target.error);
             };
           } else {
@@ -2346,6 +2354,201 @@ if (uni.restoreGlobal) {
     ]);
   }
   const PagesMaintenanceEditMaintenance = /* @__PURE__ */ _export_sfc(_sfc_main$5, [["render", _sfc_render$4], ["__scopeId", "data-v-b25d45f2"], ["__file", "D:/newLearn/new_vue/projects/rentApp/rentData/pages/maintenance/edit-maintenance.vue"]]);
+  const RENTAL_COLUMNS = [
+    "id",
+    "carId",
+    "carName",
+    "startDate",
+    "endDate",
+    "days",
+    "dailyRate",
+    "initialTotalAmount",
+    "changeAmount",
+    "changeAction",
+    "changedTotalAmount",
+    "renterName",
+    "renterPhone",
+    "status",
+    "createdAt",
+    "updatedAt"
+  ];
+  function backupFilenameStamp() {
+    const d = /* @__PURE__ */ new Date();
+    const p = (n) => String(n).padStart(2, "0");
+    return `${d.getFullYear()}${p(d.getMonth() + 1)}${p(d.getDate())}_${p(d.getHours())}${p(d.getMinutes())}${p(d.getSeconds())}`;
+  }
+  function buildInsertRental(row) {
+    const params = RENTAL_COLUMNS.map((col) => {
+      if (col === "initialTotalAmount" && row.initialTotalAmount == null && row.totalAmount != null) {
+        return row.totalAmount;
+      }
+      if (!(col in row) || row[col] === void 0) {
+        return null;
+      }
+      return row[col];
+    });
+    const ph = RENTAL_COLUMNS.map(() => "?").join(", ");
+    const sql = `INSERT INTO rental (${RENTAL_COLUMNS.join(", ")}) VALUES (${ph})`;
+    return { sql, params };
+  }
+  function saveJsonToDevice(json, filename) {
+    return new Promise((resolve, reject) => {
+      let uniPlatform;
+      try {
+        uniPlatform = uni.getSystemInfoSync().uniPlatform;
+      } catch (e) {
+        uniPlatform = "";
+      }
+      if (uniPlatform === "web") {
+        if (typeof document === "undefined") {
+          reject(new Error("H5 无 document"));
+          return;
+        }
+        const blob = new Blob([json], { type: "application/json;charset=utf-8" });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement("a");
+        a.href = url;
+        a.download = filename;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        URL.revokeObjectURL(url);
+        resolve({
+          filePath: filename,
+          hint: "文件已由浏览器下载，请在下载文件夹中查看。"
+        });
+        return;
+      }
+      const fs = typeof uni.getFileSystemManager === "function" ? uni.getFileSystemManager() : null;
+      if (fs) {
+        const filePath = `_doc/${filename}`;
+        fs.writeFile({
+          filePath,
+          data: json,
+          encoding: "utf8",
+          success: () => resolve({
+            filePath,
+            hint: "已保存到应用私有文档目录 _doc。Android 可通过连接电脑在应用数据目录中查找，或使用系统文件管理（视 ROM 而定）。"
+          }),
+          fail: (err) => reject(err || new Error("writeFile 失败"))
+        });
+        return;
+      }
+      reject(new Error("当前运行环境不支持文件导出"));
+    });
+  }
+  function exportRentalBackup() {
+    return query("SELECT * FROM rental ORDER BY id ASC").then((rows) => {
+      const list = rows || [];
+      const payload = {
+        version: 1,
+        table: "rental",
+        exportedAt: (/* @__PURE__ */ new Date()).toISOString(),
+        rowCount: list.length,
+        rows: list
+      };
+      const json = JSON.stringify(payload, null, 2);
+      const filename = `rental_backup_${backupFilenameStamp()}.json`;
+      return saveJsonToDevice(json, filename).then((info) => ({
+        rowCount: list.length,
+        filePath: info.filePath,
+        hint: info.hint
+      }));
+    });
+  }
+  function pickAndReadJsonFile() {
+    return new Promise((resolve, reject) => {
+      let uniPlatform;
+      try {
+        uniPlatform = uni.getSystemInfoSync().uniPlatform;
+      } catch (e) {
+        uniPlatform = "";
+      }
+      if (uniPlatform === "web") {
+        if (typeof document === "undefined") {
+          reject(new Error("当前环境无法选择文件"));
+          return;
+        }
+        const input = document.createElement("input");
+        input.type = "file";
+        input.accept = ".json,application/json";
+        input.style.cssText = "position:fixed;left:-100px;width:1px;height:1px;opacity:0;";
+        input.onchange = (e) => {
+          const file = e.target.files && e.target.files[0];
+          if (!file) {
+            reject(new Error("未选择文件"));
+            return;
+          }
+          const reader = new FileReader();
+          reader.onload = () => resolve(String(reader.result));
+          reader.onerror = () => reject(new Error("读取文件失败"));
+          reader.readAsText(file);
+        };
+        document.body.appendChild(input);
+        input.click();
+        setTimeout(() => {
+          try {
+            document.body.removeChild(input);
+          } catch (err) {
+          }
+        }, 500);
+        return;
+      }
+      if (typeof uni.chooseFile === "function") {
+        uni.chooseFile({
+          count: 1,
+          extension: [".json"],
+          success: (res) => {
+            const path = res.tempFiles && res.tempFiles[0] && res.tempFiles[0].path || res.tempFilePaths && res.tempFilePaths[0];
+            if (!path) {
+              reject(new Error("无法获取文件路径"));
+              return;
+            }
+            uni.getFileSystemManager().readFile({
+              filePath: path,
+              encoding: "utf8",
+              success: (r) => {
+                const txt = typeof r.data === "string" ? r.data : String(r.data);
+                resolve(txt);
+              },
+              fail: (err) => reject(err || new Error("readFile 失败"))
+            });
+          },
+          fail: (err) => {
+            const msg = err && (err.errMsg || err.message);
+            if (msg && String(msg).indexOf("cancel") !== -1) {
+              reject(new Error("已取消"));
+              return;
+            }
+            reject(err || new Error("未选择文件"));
+          }
+        });
+        return;
+      }
+      reject(new Error("当前环境不支持选择文件，请在 App 或 H5 使用"));
+    });
+  }
+  function importRentalBackup(jsonText) {
+    let payload;
+    try {
+      payload = JSON.parse(jsonText);
+    } catch (e) {
+      return Promise.reject(new Error("不是有效的 JSON 文件"));
+    }
+    if (!payload || payload.table !== "rental" || !Array.isArray(payload.rows)) {
+      return Promise.reject(new Error("不是本应用导出的租约备份（需包含 table: rental 与 rows 数组）"));
+    }
+    const rows = payload.rows;
+    return executeSql("DELETE FROM rental").then(() => {
+      if (rows.length === 0) {
+        return { rowCount: 0 };
+      }
+      return rows.reduce((chain, row) => {
+        const { sql, params } = buildInsertRental(row);
+        return chain.then(() => executeSql(sql, params));
+      }, Promise.resolve()).then(() => ({ rowCount: rows.length }));
+    });
+  }
   const _sfc_main$4 = {
     data() {
       return {
@@ -2412,7 +2615,7 @@ if (uni.restoreGlobal) {
             ];
           }
         }).catch((err) => {
-          formatAppLog("error", "at pages/rental/rental.vue:150", "加载租赁列表失败:", err);
+          formatAppLog("error", "at pages/rental/rental.vue:152", "加载租赁列表失败:", err);
           this.rentalList = [
             {
               id: 1,
@@ -2446,6 +2649,76 @@ if (uni.restoreGlobal) {
           url: "./add-rental"
         });
       },
+      onBackupTap() {
+        uni.showActionSheet({
+          itemList: ["导出租约备份", "导入租约备份"],
+          success: (res) => {
+            if (res.tapIndex === 0) {
+              this.doExportRentalBackup();
+            } else if (res.tapIndex === 1) {
+              this.doImportRentalBackup();
+            }
+          }
+        });
+      },
+      doExportRentalBackup() {
+        uni.showLoading({ title: "导出中…", mask: true });
+        exportRentalBackup().then((info) => {
+          uni.hideLoading();
+          const msg = `共 ${info.rowCount} 条租约
+${info.filePath}
+
+${info.hint || ""}`;
+          uni.showModal({
+            title: "租约已导出",
+            content: msg,
+            showCancel: false
+          });
+        }).catch((err) => {
+          formatAppLog("error", "at pages/rental/rental.vue:213", "导出租约失败:", err);
+          uni.hideLoading();
+          uni.showToast({
+            title: err && err.message ? err.message : "导出失败",
+            icon: "none",
+            duration: 2500
+          });
+        });
+      },
+      doImportRentalBackup() {
+        uni.showModal({
+          title: "确认导入",
+          content: "导入将清空当前所有租约，并以备份文件中的数据完全替换。是否继续？",
+          success: (modalRes) => {
+            if (!modalRes.confirm) {
+              return;
+            }
+            pickAndReadJsonFile().then((text) => {
+              uni.showLoading({ title: "导入中…", mask: true });
+              return importRentalBackup(text);
+            }).then((info) => {
+              uni.hideLoading();
+              this.loadRentalList();
+              uni.showModal({
+                title: "导入成功",
+                content: `已写入 ${info.rowCount} 条租约`,
+                showCancel: false
+              });
+            }).catch((err) => {
+              formatAppLog("error", "at pages/rental/rental.vue:245", "导入租约失败:", err);
+              uni.hideLoading();
+              const msg = err && err.message ? err.message : "导入失败";
+              if (msg === "已取消") {
+                return;
+              }
+              uni.showToast({
+                title: msg,
+                icon: "none",
+                duration: 2800
+              });
+            });
+          }
+        });
+      },
       editRental(item) {
         uni.navigateTo({
           url: "./edit-rental?id=" + item.id
@@ -2473,7 +2746,7 @@ if (uni.restoreGlobal) {
                     icon: "success"
                   });
                 }).catch((err) => {
-                  formatAppLog("error", "at pages/rental/rental.vue:220", "删除失败:", err);
+                  formatAppLog("error", "at pages/rental/rental.vue:294", "删除失败:", err);
                   this.rentalList = this.rentalList.filter((item) => item.id !== id);
                   uni.showToast({
                     title: "删除成功",
@@ -2539,7 +2812,7 @@ if (uni.restoreGlobal) {
                   icon: "success"
                 });
               }).catch((err) => {
-                formatAppLog("error", "at pages/rental/rental.vue:295", "续租失败:", err);
+                formatAppLog("error", "at pages/rental/rental.vue:369", "续租失败:", err);
                 uni.showToast({
                   title: "续租失败",
                   icon: "error"
@@ -2585,7 +2858,7 @@ if (uni.restoreGlobal) {
                   icon: "success"
                 });
               }).catch((err) => {
-                formatAppLog("error", "at pages/rental/rental.vue:348", "退租失败:", err);
+                formatAppLog("error", "at pages/rental/rental.vue:422", "退租失败:", err);
                 uni.showToast({
                   title: "退租失败",
                   icon: "error"
@@ -2614,7 +2887,7 @@ if (uni.restoreGlobal) {
                   icon: "success"
                 });
               }).catch((err) => {
-                formatAppLog("error", "at pages/rental/rental.vue:379", "完成租约失败:", err);
+                formatAppLog("error", "at pages/rental/rental.vue:453", "完成租约失败:", err);
                 uni.showToast({
                   title: "完成租约失败",
                   icon: "error"
@@ -2674,7 +2947,7 @@ if (uni.restoreGlobal) {
   function _sfc_render$3(_ctx, _cache, $props, $setup, $data, $options) {
     return vue.openBlock(), vue.createElementBlock("view", {
       class: "container",
-      onClick: _cache[7] || (_cache[7] = (...args) => $options.closeSlideAction && $options.closeSlideAction(...args))
+      onClick: _cache[8] || (_cache[8] = (...args) => $options.closeSlideAction && $options.closeSlideAction(...args))
     }, [
       vue.createElementVNode("view", { class: "header" }, [
         vue.createElementVNode("view", { class: "search-box" }, [
@@ -2695,7 +2968,11 @@ if (uni.restoreGlobal) {
           ), [
             [vue.vModelText, $data.searchKeyword]
           ])
-        ])
+        ]),
+        vue.createElementVNode("view", {
+          class: "header-export",
+          onClick: _cache[2] || (_cache[2] = vue.withModifiers((...args) => $options.onBackupTap && $options.onBackupTap(...args), ["stop"]))
+        }, "备份")
       ]),
       vue.createElementVNode("view", { class: "tab-section" }, [
         (vue.openBlock(true), vue.createElementBlock(
@@ -2730,10 +3007,10 @@ if (uni.restoreGlobal) {
                 ]),
                 vue.createElementVNode("view", {
                   class: "item-content",
-                  onTouchstart: _cache[2] || (_cache[2] = (...args) => $options.touchStart && $options.touchStart(...args)),
-                  onTouchmove: _cache[3] || (_cache[3] = (...args) => $options.touchMove && $options.touchMove(...args)),
-                  onTouchend: _cache[4] || (_cache[4] = (...args) => $options.touchEnd && $options.touchEnd(...args)),
-                  onClick: _cache[5] || (_cache[5] = vue.withModifiers(() => {
+                  onTouchstart: _cache[3] || (_cache[3] = (...args) => $options.touchStart && $options.touchStart(...args)),
+                  onTouchmove: _cache[4] || (_cache[4] = (...args) => $options.touchMove && $options.touchMove(...args)),
+                  onTouchend: _cache[5] || (_cache[5] = (...args) => $options.touchEnd && $options.touchEnd(...args)),
+                  onClick: _cache[6] || (_cache[6] = vue.withModifiers(() => {
                   }, ["stop"])),
                   "data-id": item.id,
                   style: vue.normalizeStyle({
@@ -2835,7 +3112,7 @@ if (uni.restoreGlobal) {
       ]),
       vue.createElementVNode("view", {
         class: "fab-add fab-add-rental",
-        onClick: _cache[6] || (_cache[6] = vue.withModifiers((...args) => $options.addRental && $options.addRental(...args), ["stop"]))
+        onClick: _cache[7] || (_cache[7] = vue.withModifiers((...args) => $options.addRental && $options.addRental(...args), ["stop"]))
       }, [
         vue.createElementVNode("text", { class: "fab-add-icon" }, "+")
       ])
