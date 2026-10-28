@@ -191,6 +191,103 @@ HTML5+ 官方 API 为 `plus.sqlite.openDatabase`，不存在 `open`；关闭库�
 
 ---
 
+## 2026-10-28 — 统计数字错误 / 显示 「暂无数据」 或 0
+
+**现象**  
+统计页月度、年度、总租赁收入偶尔为 0，或出现明显不符的假数据；「按月收入统计」常显示「该年暂无租赁收入数据」，重进页面数值才变。
+
+**原因**  
+均在 `utils/db.js` 的 IndexedDB 简化 SQL 层，非「数据库太臃肿」（图片只存 `imagePath`，不入库）：
+
+1. `SELECT SUM(...) AS total FROM rental` **无 `GROUP BY`** 时，旧实现直接返回原始行数组，页面取 `res[0].total` 为 `undefined` → 0。  
+2. `GROUP BY` 用 `/group by\s+([^;]+)/` 解析，把 `"month order by month"` 整段当分组字段 → 分组键取空，表格为空。  
+3. 聚合金额用 `changedTotalAmount || initialTotalAmount`，金额为 **0** 时被 `||` 当假值，取到另一个字段，口径错误。  
+4. `substr(startDate, 1, 4)`（按年）等写法不支持，仅识别 `1, 7`。  
+5. 查询失败时页面兜底为「模拟数据」，用户看到的就是假数字。
+
+**修复**  
+- `queryIndexedDb` 重写为「解析 → 读取 → 聚合 → 排序 → LIMIT」流水线，新增 `parseWhereClause` / `parseSelectAliases` / `parseAggregates` / `parseGroupBy` / `parseOrderBy` / `parseLimit` / `sumExprValue` / `groupKeyValue` / `aggregateRows` / `sortRows` / `readRows` / `filterRows`。  
+- 金额判断统一用 `== null`（`changedTotalAmount` → `initialTotalAmount` → `totalAmount`），0 不再被误判。  
+- `GROUP BY` 正确剥离其后的 `ORDER BY` / `LIMIT`；支持 `substr(字段, 1, 4)` 与 `1, 7`。  
+- 统计页删除旧的分组 SQL 与假数据兜底（对应上文 2026-04-13 「按月收入」条目中的 `loadMonthlyData`，该方法已整体移除）。
+
+**涉及**  
+`utils/db.js`、`pages/statistics/statistics.vue`
+
+---
+
+## 2026-10-28 — IndexedDB 升级 v2 建索引，避免全表扫描
+
+**说明**  
+IndexedDB 无 SQL 引擎，旧实现所有 `WHERE` 都要 `store.getAll()` 全表扫描。`dbVersion` 升至 **2**，在 `onupgradeneeded` 中用 `ensureStore` / `ensureIndex` 增量建索引（老库直接复用已有 store）：
+
+- `car`：`name`
+- `maintenance`：`carId`、`maintenanceDate`
+- `insurance`：`carId`、`expireDate`
+- `rental`：`carId`、`carName`、`startDate`
+
+`readRows()` 命中主键（`WHERE id = ?`）或 `carId` 索引时直接按 key 取，不再全表遍历；索引无命中再回退全表 + 内存过滤。
+
+**涉及**  
+`utils/db.js`
+
+---
+
+## 2026-10-28 — 查询早于初始化完成 → 「数据库未初始化」
+
+**现象**  
+冷启动后首次进入统计/列表页，偶发查询失败并回退模拟数据；返回再进又正常。
+
+**原因**  
+`App.vue` 的 `initDb()` 是异步的，页面 `onShow` 可能先发起 `query`，此时 `db` 仍为 `null`，旧 `query` / `executeSql` 直接 `reject('数据库未初始化')`。
+
+**修复**  
+- `initDb()` 缓存并复用同一个 `initPromise`（失败后清空，允许重试）。  
+- 新增 `waitForDb()`：`query` / `executeSql` 统一先等初始化完成再执行。  
+- `initPlusSqlite` 未改动。
+
+**涉及**  
+`utils/db.js`
+
+---
+
+## 2026-10-28 — 减少重复查询（统计页 / 车辆列表）
+
+**原因**  
+- 统计页 `onLoad` + `onShow` 各刷新一次，每次 5 条 SQL（3 条 SUM + GROUP BY + 全表），冷启动约 10 次全表扫描。  
+- 车辆列表每辆车各查 2 次保养/保险，N 辆车 = `1 + 2N` 次查询。  
+- 租赁、保险、保养列表页同样 `onLoad` + `onShow` 双次加载。
+
+**修复**  
+- 统计页只保留 `onShow` → `refreshAll()`，**只读 1 次 `rental` 全表**，在 `computeAll()` 内存中一次算出月/年/总/按车四组数字（同一快照，口径一致）；picker 回调也走 `refreshAll()`。  
+- 车辆列表新增 `fillLatestDates()`：固定 2 次批量查询，内存中按 `carId` 取最大日期。  
+- 租赁 / 保险 / 保养列表页去掉 `onLoad` 重复加载，只保留 `onShow`。
+
+**涉及**  
+`pages/statistics/statistics.vue`、`pages/index/index.vue`、`pages/rental/rental.vue`、`pages/maintenance/maintenance.vue`、`pages/insurance/insurance.vue`
+
+---
+
+## 2026-10-28 — 真实数据验证：默认月份与按车名重复统计
+
+**背景**  
+用用户导出的真机库（`car_management.db`，25 辆车 / 290 条租约，最后一条租约在 **2026-05**）跑通全部页面查询，SQL 口径与页面内存汇总一致（总收入 50494、2026 年 49572）。发现两个「看起来统计出错」的体验问题：
+
+1. **默认月份无数据 → 数字全是 0**：统计页默认取系统当前月（2026-10），该月没有任何租约，于是月度收入、按车月收入都是 0，用户误以为统计错误。
+2. **车辆改名后按车名统计被拆成两行**：租约表 `carName` 是下单时快照，库中存在 `rental.carId=6` 的旧名「长安糯玉米鲁KDK8322」与 `car.name` 新名「白糯玉米鲁KDK8322」不一致，按名称分组会拆成两条记录。
+
+**修复**  
+- 统计页首次进入时自动定位到**最近有租约的月份**（读 `rental` 全表后取 `startDate` 最大值），并同步 `carStatsMonth` 与该年 `monthlyStatsYear`；之后尊重用户手动选择的 picker（`hasAutoPickedMonth` 只生效一次）。  
+- 按车名统计改为**按 `carId` 归并**，显示名称取 `car.name`（无 `carId` 时才回退 `rental.carName`），列表 `:key` 改用 `id:<carId>`，避免重名/改名导致重复行。  
+- `refreshAll()` 同时读 `car` 表（第 2 条查询），仍是固定 2 次查询。
+
+验证结果（用该真机库）：自动定位 2026-05，月度 14688.00、2026 年 49572.00、总 50494.00；按车表 25 行，改名车辆合并为一行、年收入 1768.00。
+
+**涉及**  
+`pages/statistics/statistics.vue`
+
+---
+
 ## 说明
 
 - 真机需勾选 **manifest → App 模块 → SQLite**，并使用含该模块的自定义基座或正式包。  

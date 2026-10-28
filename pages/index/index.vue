@@ -56,9 +56,6 @@ export default {
 			searchKeyword: ''
 		};
 	},
-	onLoad() {
-		this.loadCarList();
-	},
 	onShow() {
 		// 页面显示时重新加载数据，确保添加或编辑后能看到最新数据
 		this.loadCarList();
@@ -80,32 +77,9 @@ export default {
 			// db.js会自动处理浏览器环境（IndexedDB）和App环境（plus.sqlite）
 			const sql = `SELECT * FROM car ORDER BY id DESC`;
 			query(sql).then(res => {
-				this.carList = res || [];
-
-				// 为每个车辆添加最新的保养时间和保险时间
-				this.carList.forEach(car => {
-					// 初始化默认值
-					car.latestMaintenance = '无';
-					car.latestInsurance = '无';
-
-					// 查询最新保养记录
-					query(`SELECT maintenanceDate FROM maintenance WHERE carId = ? ORDER BY maintenanceDate DESC LIMIT 1`, [car.id]).then(maintenanceRes => {
-						// console.log('保养查询结果 for car ' + car.id + ':', maintenanceRes);
-						if (maintenanceRes && maintenanceRes.length > 0) {
-							car.latestMaintenance = maintenanceRes[0].maintenanceDate;
-						}
-					});
-
-					// 查询最新保险记录
-					query(`SELECT expireDate FROM insurance WHERE carId = ? ORDER BY expireDate DESC LIMIT 1`, [car.id]).then(insuranceRes => {
-						// console.log('保险查询结果 for car ' + car.id + ':', insuranceRes);
-						if (insuranceRes && insuranceRes.length > 0) {
-							car.latestInsurance = insuranceRes[0].expireDate;
-						}
-					});
-				});
-				// 如果数据库中没有数据，使用模拟数据
-				if (this.carList.length === 0) {
+				const list = res || [];
+				if (list.length === 0) {
+					// 如果数据库中没有数据，使用模拟数据
 					this.carList = [
 						{
 							id: 1,
@@ -124,7 +98,13 @@ export default {
 							latestInsurance: '2026-11-30'
 						}
 					];
+					return;
 				}
+				this.carList = list.map(car => Object.assign({}, car, {
+					latestMaintenance: '无',
+					latestInsurance: '无'
+				}));
+				this.fillLatestDates();
 			}).catch(err => {
 				console.error('加载车辆列表失败:', err);
 				// 加载失败时使用模拟数据
@@ -146,6 +126,40 @@ export default {
 						latestInsurance: '2026-11-30'
 					}
 				];
+			});
+		},
+		/**
+		 * 一次性批量读取保养/保险表，在内存中按 carId 取最新日期。
+		 * 原实现每辆车各查 2 次（车辆 10 台就是 21 次查询），改为固定 2 次查询。
+		 */
+		fillLatestDates() {
+			Promise.all([
+				query('SELECT carId, maintenanceDate FROM maintenance'),
+				query('SELECT carId, expireDate FROM insurance')
+			]).then(([maintenanceRows, insuranceRows]) => {
+				const latestByCarId = (rows, dateField) => {
+					const map = {};
+					(rows || []).forEach(row => {
+						const carId = row.carId;
+						if (carId == null) {
+							return;
+						}
+						const date = row[dateField] || '';
+						if (date && (!map[carId] || date > map[carId])) {
+							map[carId] = date;
+						}
+					});
+					return map;
+				};
+				const maintenanceMap = latestByCarId(maintenanceRows, 'maintenanceDate');
+				const insuranceMap = latestByCarId(insuranceRows, 'expireDate');
+				this.carList.forEach(car => {
+					car.latestMaintenance = maintenanceMap[car.id] || '无';
+					car.latestInsurance = insuranceMap[car.id] || '无';
+				});
+			}).catch(err => {
+				// 保养/保险读取失败不影响车辆列表展示，保持默认「无」
+				console.warn('加载保养/保险日期失败:', err);
 			});
 		},
 		addCar() {

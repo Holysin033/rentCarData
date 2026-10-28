@@ -42,9 +42,6 @@ export default {
 			searchKeyword: ''
 		};
 	},
-	onLoad() {
-		this.loadInsuranceList();
-	},
 	onShow() {
 		// 页面显示时重新加载数据，确保添加或编辑后能看到最新数据
 		this.loadInsuranceList();

@@ -87,7 +87,7 @@
 					<view class="table-cell">月收入(元)</view>
 					<view class="table-cell">年收入(元)</view>
 				</view>
-				<view v-for="item in carData" :key="item.carName" class="table-row table-header-3">
+				<view v-for="item in carData" :key="item.key" class="table-row table-header-3">
 					<view class="table-cell table-cell-wide">{{ item.carName }}</view>
 					<view class="table-cell">{{ item.monthIncome }}</view>
 					<view class="table-cell">{{ item.yearIncome }}</view>
@@ -123,7 +123,9 @@ export default {
 			yearlyIncome: 0,
 			totalIncome: 0,
 			monthlyData: [],
-			carData: []
+			carData: [],
+			// 首次加载是否已自动定位到最近有租约的月份（之后尊重用户手动选择）
+			hasAutoPickedMonth: false
 		};
 	},
 	computed: {
@@ -131,134 +133,124 @@ export default {
 			return `${this.monthlyStatsYear}-01-01`;
 		}
 	},
-	onLoad() {
-		this.loadStatistics();
-		this.loadMonthlyData();
-		this.loadCarData();
-	},
 	onShow() {
-		// 页面显示时重新加载数据，确保添加或编辑后能看到最新数据
-		this.loadStatistics();
-		this.loadMonthlyData();
-		this.loadCarData();
+		// 进入/返回页面时刷新一次，保证修改租约后数据即时可见
+		this.refreshAll();
 	},
 	methods: {
 		onDateChange(e) {
 			this.selectedDate = e.detail.value;
-			this.loadStatistics();
+			this.refreshAll();
 		},
 		onCarStatsMonthChange(e) {
 			this.carStatsMonth = e.detail.value;
-			this.loadCarData();
+			this.refreshAll();
 		},
 		onMonthlyStatsYearChange(e) {
 			const v = e.detail.value || '';
 			this.monthlyStatsYear = v.length >= 4 ? v.substring(0, 4) : String(new Date().getFullYear());
-			this.loadMonthlyData();
+			this.refreshAll();
 		},
-		loadStatistics() {
-			// 直接从数据库加载统计数据
-			// db.js会自动处理浏览器环境（IndexedDB）和App环境（plus.sqlite）
-
-			// 计算月度租赁收入（使用initialTotalAmount和changedTotalAmount）
-			const monthlySql = `SELECT SUM(CASE WHEN changedTotalAmount IS NOT NULL THEN changedTotalAmount ELSE initialTotalAmount END) as total FROM rental WHERE substr(startDate, 1, 7) = ?`;
-			query(monthlySql, [this.selectedDate]).then(res => {
-				this.monthlyIncome = res && res[0] && res[0].total ? parseFloat(res[0].total).toFixed(2) : 0;
-			}).catch(err => {
-				console.error('加载月度租赁收入失败:', err);
-				// 加载失败时使用模拟数据
-				this.monthlyIncome = '3600.00';
-			});
-
-			// 计算年度租赁收入
-			const year = this.selectedDate.substring(0, 4);
-			const yearlySql = `SELECT SUM(CASE WHEN changedTotalAmount IS NOT NULL THEN changedTotalAmount ELSE initialTotalAmount END) as total FROM rental WHERE substr(startDate, 1, 4) = ?`;
-			query(yearlySql, [year]).then(res => {
-				this.yearlyIncome = res && res[0] && res[0].total ? parseFloat(res[0].total).toFixed(2) : 0;
-			}).catch(err => {
-				console.error('加载年度租赁收入失败:', err);
-				// 加载失败时使用模拟数据
-				this.yearlyIncome = '43200.00';
-			});
-
-			// 计算总租赁收入
-			const totalSql = `SELECT SUM(CASE WHEN changedTotalAmount IS NOT NULL THEN changedTotalAmount ELSE initialTotalAmount END) as total FROM rental`;
-			query(totalSql).then(res => {
-				this.totalIncome = res && res[0] && res[0].total ? parseFloat(res[0].total).toFixed(2) : 0;
-			}).catch(err => {
-				console.error('加载总租赁收入失败:', err);
-				// 加载失败时使用模拟数据
-				this.totalIncome = '43200.00';
-			});
-		},
-		loadMonthlyData() {
-			const yearPrefix = this.monthlyStatsYear;
-			const monthlySql = `SELECT substr(startDate, 1, 7) as month, SUM(CASE WHEN changedTotalAmount IS NOT NULL THEN changedTotalAmount ELSE initialTotalAmount END) as income FROM rental GROUP BY month ORDER BY month`;
-			query(monthlySql)
-				.then(res => {
-					const rows = (res || [])
-						.filter(item => item.month && String(item.month).startsWith(yearPrefix + '-'))
-						.map(item => ({
-							month: item.month,
-							income: parseFloat(item.income).toFixed(2)
-						}));
-					this.monthlyData = rows;
-				})
-				.catch(err => {
-					console.error('加载按月收入统计失败:', err);
-					const y = yearPrefix;
-					this.monthlyData = [
-						{ month: `${y}-01`, income: '3000.00' },
-						{ month: `${y}-02`, income: '2500.00' },
-						{ month: `${y}-03`, income: '4000.00' }
-					];
-				});
-		},
-		rentalRowAmount(row) {
+		/** 租约实际金额：优先变化后的总金额，其次初始金额，兼容历史 totalAmount */
+		rentalAmount(row) {
 			let v = row.changedTotalAmount;
 			if (v == null) v = row.initialTotalAmount;
 			if (v == null) v = row.totalAmount;
 			const n = parseFloat(v);
 			return Number.isFinite(n) ? n : 0;
 		},
-		loadCarData() {
-			const month = this.carStatsMonth;
-			const year = month.length >= 4 ? month.substring(0, 4) : '';
-			const sql = `SELECT * FROM rental ORDER BY id DESC`;
-			query(sql)
-				.then(res => {
-					const list = res || [];
-					const names = new Set();
-					const monthMap = {};
-					const yearMap = {};
-					list.forEach(row => {
-						const carName = row.carName || '未命名';
-						names.add(carName);
-						const amt = this.rentalRowAmount(row);
-						const sd = row.startDate || '';
-						if (sd.substring(0, 7) === month) {
-							monthMap[carName] = (monthMap[carName] || 0) + amt;
-						}
-						if (year && sd.substring(0, 4) === year) {
-							yearMap[carName] = (yearMap[carName] || 0) + amt;
-						}
-					});
-					this.carData = Array.from(names)
-						.map(carName => ({
-							carName,
-							monthIncome: (monthMap[carName] || 0).toFixed(2),
-							yearIncome: (yearMap[carName] || 0).toFixed(2)
-						}))
-						.sort((a, b) => parseFloat(b.monthIncome) - parseFloat(a.monthIncome));
-				})
-				.catch(err => {
-					console.error('加载按车名统计失败:', err);
-					this.carData = [
-						{ carName: '大众朗逸', monthIncome: '1200.00', yearIncome: '18000.00' },
-						{ carName: '丰田凯美瑞', monthIncome: '800.00', yearIncome: '15000.00' },
-						{ carName: '本田雅阁', monthIncome: '0.00', yearIncome: '10200.00' }
-					];
+		/** 只读一次 rental 全表，在内存中一次性汇总月/年/总/车名维度。 */
+		refreshAll() {
+			Promise.all([
+				query('SELECT * FROM rental'),
+				query('SELECT * FROM car')
+			]).then(([rentalRows, carRows]) => {
+				this.computeAll(rentalRows || [], carRows || []);
+			}).catch((err) => {
+				console.warn('加载统计数据失败:', err);
+				this.computeAll([], []);
+			});
+		},
+		computeAll(list, carRows) {
+			// 车辆当前名称：租约里的 carName 是下单时的快照，车辆改名后会与现状不一致
+			const carNameById = {};
+			(carRows || []).forEach(car => {
+				carNameById[car.id] = car.name;
+			});
+
+			// 首次进入自动定位到「最近有租约的月份」，避免默认当前月无数据时统计全为 0
+			if (!this.hasAutoPickedMonth && list.length > 0) {
+				let latest = '';
+				list.forEach(row => {
+					const sd = row.startDate || '';
+					if (sd > latest) latest = sd;
 				});
+				if (latest.length >= 7) {
+					this.selectedDate = latest.substring(0, 7);
+					this.carStatsMonth = this.selectedDate;
+					this.monthlyStatsYear = latest.substring(0, 4);
+				}
+			}
+			this.hasAutoPickedMonth = true;
+
+			const monthKey = this.selectedDate || '';
+			const yearKey = monthKey.substring(0, 4);
+			const yearOfMonthlyStats = String(this.monthlyStatsYear || '');
+			const carMonthKey = this.carStatsMonth || '';
+			const carYearKey = carMonthKey.substring(0, 4);
+
+			let monthly = 0;
+			let yearly = 0;
+			let total = 0;
+			const monthBuckets = {};
+			const carMonthMap = {};
+			const carYearMap = {};
+			const carKeyName = {};
+
+			list.forEach((row) => {
+				const amt = this.rentalAmount(row);
+				const startDate = row.startDate || '';
+				const rowMonth = startDate.substring(0, 7);
+				const rowYear = startDate.substring(0, 4);
+
+				total += amt;
+				if (rowMonth === monthKey) {
+					monthly += amt;
+				}
+				if (yearKey && rowYear === yearKey) {
+					yearly += amt;
+				}
+				if (yearOfMonthlyStats && rowYear === yearOfMonthlyStats) {
+					monthBuckets[rowMonth] = (monthBuckets[rowMonth] || 0) + amt;
+				}
+
+				// 优先按 carId 归并（车辆改名后历史租约仍算同一辆），无 carId 时才用名称
+				const carKey = row.carId != null ? 'id:' + row.carId : 'name:' + (row.carName || '未命名');
+				carKeyName[carKey] = carNameById[row.carId] || row.carName || '未命名';
+				if (rowMonth === carMonthKey) {
+					carMonthMap[carKey] = (carMonthMap[carKey] || 0) + amt;
+				}
+				if (carYearKey && rowYear === carYearKey) {
+					carYearMap[carKey] = (carYearMap[carKey] || 0) + amt;
+				}
+			});
+
+			this.monthlyIncome = monthly.toFixed(2);
+			this.yearlyIncome = yearly.toFixed(2);
+			this.totalIncome = total.toFixed(2);
+
+			this.monthlyData = Object.keys(monthBuckets)
+				.sort()
+				.map((m) => ({ month: m, income: monthBuckets[m].toFixed(2) }));
+
+			this.carData = Object.keys(carKeyName)
+				.map((carKey) => ({
+					key: carKey,
+					carName: carKeyName[carKey],
+					monthIncome: (carMonthMap[carKey] || 0).toFixed(2),
+					yearIncome: (carYearMap[carKey] || 0).toFixed(2)
+				}))
+				.sort((a, b) => parseFloat(b.monthIncome) - parseFloat(a.monthIncome));
 		}
 	}
 }

@@ -1,7 +1,11 @@
 // 数据库管理模块
 const dbName = 'car_management';
+// IndexedDB 结构版本：2 起为 rental/maintenance/insurance 建立索引，避免全表扫描
+const dbVersion = 2;
 let db = null;
 let indexedDb = null;
+// 初始化 Promise 缓存：页面可能早于 App.vue 的 initDb 完成就发起查询
+let initPromise = null;
 
 /** 5+ 官方为 openDatabase / closeDatabase，无 open / close */
 function hasPlusSqlite() {
@@ -39,7 +43,10 @@ function bindPlusSqlParams(sql, params) {
 
 // 初始化数据库
 export function initDb() {
-	return new Promise((resolve, reject) => {
+	if (initPromise) {
+		return initPromise;
+	}
+	initPromise = new Promise((resolve, reject) => {
 		const runInit = () => {
 			if (hasPlusSqlite()) {
 				initPlusSqlite().then(resolve).catch(reject);
@@ -61,12 +68,40 @@ export function initDb() {
 		runInit();
 		// #endif
 	});
+	// 初始化失败时清空缓存，允许后续重试
+	initPromise.catch(() => {
+		initPromise = null;
+	});
+	return initPromise;
+}
+
+/** 查询前确保数据库已就绪（等待 initDb 完成，避免首屏查询撞上「数据库未初始化」） */
+function waitForDb() {
+	if (db) {
+		return Promise.resolve();
+	}
+	if (initPromise) {
+		return initPromise.then(() => {
+			if (!db) {
+				throw '数据库未初始化';
+			}
+		});
+	}
+	return Promise.reject('数据库未初始化');
 }
 
 // 初始化IndexedDB（浏览器环境）
 function initIndexedDB() {
 	return new Promise((resolve, reject) => {
-		const request = indexedDB.open(dbName, 1);
+		if (typeof indexedDB === 'undefined') {
+			reject('当前环境不支持IndexedDB');
+			return;
+		}
+		if (indexedDb) {
+			resolve();
+			return;
+		}
+		const request = indexedDB.open(dbName, dbVersion);
 
 		request.onerror = function (event) {
 			reject('IndexedDB打开失败: ' + event.target.error);
@@ -79,32 +114,39 @@ function initIndexedDB() {
 		};
 
 		request.onupgradeneeded = function (event) {
-			const db = event.target.result;
+			const idb = event.target.result;
+			const upgradeTx = event.target.transaction;
 
-			// 创建车辆表
-			if (!db.objectStoreNames.contains('car')) {
-				db.createObjectStore('car', { keyPath: 'id', autoIncrement: true });
-			}
+			// 创建或复用表（老库升级时表已存在，直接取用）
+			const ensureStore = (name) => {
+				if (!idb.objectStoreNames.contains(name)) {
+					return idb.createObjectStore(name, { keyPath: 'id', autoIncrement: true });
+				}
+				return upgradeTx.objectStore(name);
+			};
+			// 建索引（已存在则跳过），让 carId / 日期类查询走索引而不是 getAll()
+			const ensureIndex = (store, indexName, keyPath) => {
+				if (store && !store.indexNames.contains(indexName)) {
+					store.createIndex(indexName, keyPath, { unique: false });
+				}
+			};
 
-			// 创建保险表
-			if (!db.objectStoreNames.contains('insurance')) {
-				db.createObjectStore('insurance', { keyPath: 'id', autoIncrement: true });
-			}
+			ensureIndex(ensureStore('car'), 'name', 'name');
 
-			// 创建保养表
-			if (!db.objectStoreNames.contains('maintenance')) {
-				db.createObjectStore('maintenance', { keyPath: 'id', autoIncrement: true });
-			}
+			const insuranceStore = ensureStore('insurance');
+			ensureIndex(insuranceStore, 'carId', 'carId');
+			ensureIndex(insuranceStore, 'expireDate', 'expireDate');
 
-			// 创建租赁记录表
-			if (!db.objectStoreNames.contains('rental')) {
-				db.createObjectStore('rental', { keyPath: 'id', autoIncrement: true });
-			}
+			const maintenanceStore = ensureStore('maintenance');
+			ensureIndex(maintenanceStore, 'carId', 'carId');
+			ensureIndex(maintenanceStore, 'maintenanceDate', 'maintenanceDate');
 
-			// 创建统计配置表
-			if (!db.objectStoreNames.contains('statistics_config')) {
-				db.createObjectStore('statistics_config', { keyPath: 'id', autoIncrement: true });
-			}
+			const rentalStore = ensureStore('rental');
+			ensureIndex(rentalStore, 'carId', 'carId');
+			ensureIndex(rentalStore, 'carName', 'carName');
+			ensureIndex(rentalStore, 'startDate', 'startDate');
+
+			ensureStore('statistics_config');
 		};
 	});
 }
@@ -262,12 +304,7 @@ function migratePlusSqliteLegacyColumns() {
 
 // 执行SQL查询
 export function executeSql(sql, params = []) {
-	return new Promise((resolve, reject) => {
-		if (!db) {
-			reject('数据库未初始化');
-			return;
-		}
-
+	return waitForDb().then(() => new Promise((resolve, reject) => {
 		if (useIndexedDbStorage()) {
 			// 浏览器环境使用IndexedDB
 			executeIndexedDb(sql, params).then(resolve).catch(reject);
@@ -284,17 +321,12 @@ export function executeSql(sql, params = []) {
 				}
 			});
 		}
-	});
+	}));
 }
 
 // 查询数据
 export function query(sql, params = []) {
-	return new Promise((resolve, reject) => {
-		if (!db) {
-			reject('数据库未初始化');
-			return;
-		}
-
+	return waitForDb().then(() => new Promise((resolve, reject) => {
 		if (useIndexedDbStorage()) {
 			// 浏览器环境使用IndexedDB
 			queryIndexedDb(sql, params).then(resolve).catch(reject);
@@ -311,7 +343,7 @@ export function query(sql, params = []) {
 				}
 			});
 		}
-	});
+	}));
 }
 
 // 关闭数据库
@@ -475,143 +507,297 @@ function executeIndexedDb(sql, params) {
 	});
 }
 
-// 在IndexedDB中查询数据（简化实现）
+// 在IndexedDB中查询数据（轻量 SQL 解析，仅覆盖本项目用到的语法）
 function queryIndexedDb(sql, params) {
 	return new Promise((resolve, reject) => {
-		// 这里实现简化的SQL查询
-		// 实际项目中可能需要更复杂的SQL解析器
-		try {
-			// 提取表名
-			const lowerSql = sql.toLowerCase();
-			let tableName = '';
+		if (!indexedDb) {
+			reject('数据库未初始化');
+			return;
+		}
 
-			if (lowerSql.startsWith('select')) {
-				tableName = lowerSql.match(/from\s+(\w+)/)[1];
-			}
+		const fromMatch = sql.match(/\bfrom\s+(\w+)/i);
+		if (!fromMatch) {
+			reject('不支持的SQL查询');
+			return;
+		}
+		const tableName = fromMatch[1];
+		const where = parseWhereClause(sql);
 
-			if (!tableName) {
-				reject('不支持的SQL查询');
-				return;
-			}
+		readRows(tableName, where, params).then((rows) => {
+			try {
+				const aliases = parseSelectAliases(sql);
+				const aggregates = parseAggregates(sql);
+				const groupBy = parseGroupBy(sql);
+				const orderBy = parseOrderBy(sql);
+				const limit = parseLimit(sql);
 
-			const transaction = indexedDb.transaction([tableName], 'readonly');
-			const store = transaction.objectStore(tableName);
-			const request = store.getAll();
-
-			request.onsuccess = function (event) {
-				let result = event.target.result;
-
-				// 处理WHERE子句
-				const whereMatch = sql.match(/WHERE\s+([^;]+)/i);
-				if (whereMatch) {
-					const whereClause = whereMatch[1];
-					// 处理id = ? 或 carId = ? 的情况
-					if (whereClause.includes('id = ?') && params.length > 0) {
-						const id = params[0];
-						result = result.filter(item => item.id == id);
-					} else if (whereClause.includes('carId = ?') && params.length > 0) {
-						const carId = params[0];
-						result = result.filter(item => item.carId == carId);
-					} else if (whereClause.includes('substr') && params.length > 0) {
-						// 处理substr(startDate, 1, 7) = ? 的情况
-						const value = params[0];
-						result = result.filter(item => {
-							if (whereClause.includes('startDate')) {
-								return item.startDate && item.startDate.substring(0, 7) == value;
-							} else if (whereClause.includes('maintenanceDate')) {
-								return item.maintenanceDate && item.maintenanceDate.substring(0, 7) == value;
-							}
-							return false;
-						});
-					}
-				}
-
-				// 处理GROUP BY子句和聚合函数
-				const groupMatch = sql.match(/group by\s+([^;]+)/i);
-				if (groupMatch) {
-					const groupField = groupMatch[1].trim();
-					const sumMatch = sql.match(/sum\s*\(.*?\)\s*as\s*(\w+)/i);
-					if (sumMatch) {
-						const sumField = sumMatch[1];
-						// 分组求和
-						const groupedData = {};
-						result.forEach(item => {
-							let groupKey;
-							if (groupField === 'substr(startDate, 1, 7)') {
-								groupKey = item.startDate ? item.startDate.substring(0, 7) : '';
-							} else if (groupField === 'carName') {
-								groupKey = item.carName || '';
-							} else {
-								groupKey = item[groupField] || '';
-							}
-							if (!groupedData[groupKey]) {
-								groupedData[groupKey] = 0;
-							}
-							// 计算收入，优先使用changedTotalAmount，否则使用initialTotalAmount
-							const amount = item.changedTotalAmount || item.initialTotalAmount || 0;
-							groupedData[groupKey] += amount;
-						});
-						// 转换为数组
-						result = Object.entries(groupedData).map(([key, value]) => {
-							const item = {};
-							if (groupField === 'substr(startDate, 1, 7)') {
-								item.month = key;
-							} else if (groupField === 'carName') {
-								item.carName = key;
-								// 计算租约数
-								item.count = result.filter(i => i.carName === key).length;
-							} else {
-								item[groupField] = key;
-							}
-							item[sumField] = value;
-							return item;
-						});
-					}
-				}
-
-				// 处理ORDER BY子句
-				const orderMatch = sql.match(/order by\s+([^;]+)/i);
-				if (orderMatch) {
-					const orderClause = orderMatch[1].trim();
-					if (orderClause.includes('desc')) {
-						const field = orderClause.replace('desc', '').trim();
-						// 处理字符串类型的排序
-						result.sort((a, b) => {
-							if (typeof a[field] === 'string' && typeof b[field] === 'string') {
-								return b[field].localeCompare(a[field]);
-							} else {
-								return b[field] - a[field];
-							}
-						});
-					} else if (orderClause.includes('asc')) {
-						const field = orderClause.replace('asc', '').trim();
-						// 处理字符串类型的排序
-						result.sort((a, b) => {
-							if (typeof a[field] === 'string' && typeof b[field] === 'string') {
-								return a[field].localeCompare(b[field]);
-							} else {
-								return a[field] - b[field];
-							}
-						});
-					}
-				}
-
-				// 处理LIMIT子句
-				const limitMatch = sql.match(/limit\s+(\d+)/i);
-				if (limitMatch) {
-					const limit = parseInt(limitMatch[1]);
+				let result = (groupBy || aggregates.length)
+					? aggregateRows(rows, groupBy, aggregates, aliases)
+					: rows;
+				result = sortRows(result, orderBy);
+				if (limit > 0) {
 					result = result.slice(0, limit);
 				}
-
-				// 模拟SQL查询结果格式
 				resolve(result);
-			};
+			} catch (error) {
+				reject(error);
+			}
+		}).catch(reject);
+	});
+}
 
-			request.onerror = function (event) {
-				reject(event.target.error);
-			};
+/** 解析 WHERE（仅支持单条件：id = ? / carId = ? / substr(field, 起始, 长度) = ? / field = ?） */
+function parseWhereClause(sql) {
+	const m = sql.match(/where\s+([\s\S]+?)(?:\s+order\s+by\s|\s+group\s+by\s|\s+limit\s|;|$)/i);
+	if (!m) {
+		return null;
+	}
+	const clause = m[1].trim();
+	if (/^id\s*=\s*\?$/i.test(clause)) {
+		return { kind: 'id' };
+	}
+	if (/^carid\s*=\s*\?$/i.test(clause)) {
+		return { kind: 'carId' };
+	}
+	const sub = clause.match(/^substr\s*\(\s*(\w+)\s*,\s*(\d+)\s*,\s*(\d+)\s*\)\s*=\s*\?$/i);
+	if (sub) {
+		return { kind: 'substr', field: sub[1], start: parseInt(sub[2], 10), len: parseInt(sub[3], 10) };
+	}
+	const eq = clause.match(/^(\w+)\s*=\s*\?$/i);
+	if (eq) {
+		return { kind: 'eq', field: eq[1] };
+	}
+	return null;
+}
+
+/** 解析 SELECT 列表里的别名，如 substr(startDate, 1, 7) as month */
+function parseSelectAliases(sql) {
+	const fromIndex = sql.search(/\bfrom\b/i);
+	const selectList = fromIndex > 0 ? sql.substring(0, fromIndex) : sql;
+	const aliases = {};
+	const re = /(substr\s*\(\s*(\w+)\s*,\s*(\d+)\s*,\s*(\d+)\s*\)|\w+)\s+as\s+(\w+)/gi;
+	let m;
+	while ((m = re.exec(selectList))) {
+		const alias = m[5];
+		if (m[2]) {
+			aliases[alias] = { kind: 'substr', field: m[2], start: parseInt(m[3], 10), len: parseInt(m[4], 10) };
+		} else {
+			aliases[alias] = { kind: 'field', field: m[1] };
+		}
+	}
+	return aliases;
+}
+
+/** 解析 SUM(...) as x / COUNT(*) as x */
+function parseAggregates(sql) {
+	const fromIndex = sql.search(/\bfrom\b/i);
+	const selectList = fromIndex > 0 ? sql.substring(0, fromIndex) : sql;
+	const list = [];
+	let m;
+	const sumRe = /sum\s*\(([\s\S]*?)\)\s+as\s+(\w+)/gi;
+	while ((m = sumRe.exec(selectList))) {
+		list.push({ type: 'sum', expr: m[1].trim(), alias: m[2] });
+	}
+	const countRe = /count\s*\(\s*(?:\*|[\w.]+)\s*\)\s+as\s+(\w+)/gi;
+	while ((m = countRe.exec(selectList))) {
+		list.push({ type: 'count', alias: m[1] });
+	}
+	return list;
+}
+
+/** 解析 GROUP BY 的字段（去掉后面的 ORDER BY / LIMIT） */
+function parseGroupBy(sql) {
+	const m = sql.match(/group\s+by\s+([\s\S]+?)(?:\s+order\s+by\s|\s+limit\s|;|$)/i);
+	return m ? m[1].trim() : null;
+}
+
+/** 解析 ORDER BY，支持多字段与 asc/desc */
+function parseOrderBy(sql) {
+	const m = sql.match(/order\s+by\s+([\s\S]+?)(?:\s+limit\s|;|$)/i);
+	if (!m) {
+		return [];
+	}
+	return m[1]
+		.split(',')
+		.map((part) => {
+			const text = part.trim().replace(/\s+/g, ' ');
+			if (!text) {
+				return null;
+			}
+			const desc = /\bdesc\b/i.test(text);
+			const field = text.replace(/\b(asc|desc)\b/gi, '').trim();
+			return field ? { field, desc } : null;
+		})
+		.filter(Boolean);
+}
+
+function parseLimit(sql) {
+	const m = sql.match(/limit\s+(\d+)/i);
+	return m ? parseInt(m[1], 10) : 0;
+}
+
+/** 计算 SUM 表达式在当前行的值（支持 CASE WHEN a IS NOT NULL THEN b ELSE c END，其余按字段名处理） */
+function sumExprValue(expr, row) {
+	const text = String(expr || '').trim();
+	const caseMatch = text.match(
+		/^case\s+when\s+(\w+)\s+is\s+not\s+null\s+then\s+(\w+)\s+else\s+(\w+)\s+end$/i
+	);
+	let field;
+	if (caseMatch) {
+		field = row[caseMatch[1]] != null ? caseMatch[2] : caseMatch[3];
+	} else {
+		field = text.replace(/[^A-Za-z0-9_]/g, '');
+	}
+	const value = parseFloat(row[field]);
+	return Number.isFinite(value) ? value : 0;
+}
+
+/** 计算某行在某分组字段上的分组键 */
+function groupKeyValue(row, groupToken, aliases) {
+	const token = String(groupToken).trim();
+	const inline = token.match(/^substr\s*\(\s*(\w+)\s*,\s*(\d+)\s*,\s*(\d+)\s*\)$/i);
+	if (inline) {
+		const value = row[inline[1]];
+		return value == null ? '' : String(value).substr(parseInt(inline[2], 10) - 1, parseInt(inline[3], 10));
+	}
+	const alias = aliases[token];
+	if (alias && alias.kind === 'substr') {
+		const value = row[alias.field];
+		return value == null ? '' : String(value).substr(alias.start - 1, alias.len);
+	}
+	const field = alias && alias.kind === 'field' ? alias.field : token;
+	const value = row[field];
+	return value == null ? '' : String(value);
+}
+
+/** 分组 + 聚合；无 GROUP BY 时返回单行汇总 */
+function aggregateRows(rows, groupBy, aggregates, aliases) {
+	const buildRow = (groupRows, key) => {
+		const out = {};
+		if (groupBy) {
+			out[groupBy] = key;
+		}
+		aggregates.forEach((agg) => {
+			if (agg.type === 'count') {
+				out[agg.alias] = groupRows.length;
+			} else {
+				let total = 0;
+				groupRows.forEach((row) => {
+					total += sumExprValue(agg.expr, row);
+				});
+				out[agg.alias] = total;
+			}
+		});
+		return out;
+	};
+
+	if (!groupBy) {
+		return [buildRow(rows, '')];
+	}
+
+	const groups = new Map();
+	rows.forEach((row) => {
+		const key = groupKeyValue(row, groupBy, aliases);
+		if (!groups.has(key)) {
+			groups.set(key, []);
+		}
+		groups.get(key).push(row);
+	});
+	return Array.from(groups.keys()).map((key) => buildRow(groups.get(key), key));
+}
+
+function sortRows(rows, orderBy) {
+	if (!orderBy || orderBy.length === 0) {
+		return rows;
+	}
+	const copy = rows.slice();
+	copy.sort((a, b) => {
+		for (let i = 0; i < orderBy.length; i++) {
+			const { field, desc } = orderBy[i];
+			const av = a[field];
+			const bv = b[field];
+			let cmp;
+			if (typeof av === 'string' || typeof bv === 'string') {
+				cmp = String(av == null ? '' : av).localeCompare(String(bv == null ? '' : bv));
+			} else {
+				cmp = (Number(av) || 0) - (Number(bv) || 0);
+			}
+			if (cmp !== 0) {
+				return desc ? -cmp : cmp;
+			}
+		}
+		return 0;
+	});
+	return copy;
+}
+
+/** 读取数据：主键/索引命中时避免全表扫描，其余情况 getAll + 内存过滤 */
+function readRows(tableName, where, params) {
+	return new Promise((resolve, reject) => {
+		const fail = (event) => reject((event && event.target && event.target.error) || new Error('IndexedDB读取失败'));
+
+		let transaction;
+		try {
+			transaction = indexedDb.transaction([tableName], 'readonly');
 		} catch (error) {
 			reject(error);
+			return;
 		}
+		const store = transaction.objectStore(tableName);
+
+		// 主键查询
+		if (where && where.kind === 'id' && params && params.length > 0) {
+			const req = store.get(params[0]);
+			req.onsuccess = () => resolve(req.result ? [req.result] : []);
+			req.onerror = fail;
+			return;
+		}
+
+		// carId 查询：优先走索引；索引无命中时用宽松比较兜底（兼容历史数据里字符串/数字混存）
+		if (where && where.kind === 'carId' && params && params.length > 0) {
+			const key = params[0];
+			const hasIndex = store.indexNames && store.indexNames.contains('carId');
+			if (hasIndex) {
+				const indexReq = store.index('carId').getAll(key);
+				indexReq.onsuccess = () => {
+					if (indexReq.result && indexReq.result.length > 0) {
+						resolve(indexReq.result);
+						return;
+					}
+					const allReq = store.getAll();
+					allReq.onsuccess = () => resolve(filterRows(allReq.result || [], where, params));
+					allReq.onerror = fail;
+				};
+				indexReq.onerror = fail;
+				return;
+			}
+		}
+
+		const allReq = store.getAll();
+		allReq.onsuccess = () => resolve(filterRows(allReq.result || [], where, params));
+		allReq.onerror = fail;
 	});
+}
+
+function filterRows(rows, where, params) {
+	if (!where || !params || params.length === 0) {
+		return rows;
+	}
+	if (where.kind === 'id') {
+		return rows.filter((row) => row.id == params[0]);
+	}
+	if (where.kind === 'carId') {
+		return rows.filter((row) => row.carId == params[0]);
+	}
+	if (where.kind === 'substr') {
+		const value = params[0];
+		return rows.filter((row) => {
+			const fieldValue = row[where.field];
+			return fieldValue != null && String(fieldValue).substr(where.start - 1, where.len) == value;
+		});
+	}
+	if (where.kind === 'eq') {
+		return rows.filter((row) => row[where.field] == params[0]);
+	}
+	return rows;
 }

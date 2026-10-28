@@ -91,9 +91,6 @@ export default {
 			slideId: 0
 		};
 	},
-	onLoad() {
-		this.loadRentalList();
-	},
 	onShow() {
 		// 页面显示时重新加载数据，确保添加或编辑后能看到最新数据
 		this.loadRentalList();
@@ -104,7 +101,7 @@ export default {
 			// db.js会自动处理浏览器环境（IndexedDB）和App环境（plus.sqlite）
 			const sql = `SELECT * FROM rental ORDER BY id DESC`;
 			query(sql).then(res => {
-				const rentals = res.sort((a, b) => b.id - a.id) || [];
+				const rentals = (res || []).sort((a, b) => b.id - a.id);
 				// 处理数据，确保使用initialTotalAmount而不是totalAmount
 				this.rentalList = rentals.map(item => {
 					// 如果有totalAmount但没有initialTotalAmount，将totalAmount的值赋给initialTotalAmount
