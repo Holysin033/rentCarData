@@ -1,9 +1,9 @@
 <script>
-import { initDb } from './utils/db.js';
+import { initDb, hasPlusSqlite } from './utils/db.js';
 export default {
 	onLaunch: function () {
 		console.log('App Launch');
-		// 初始化数据库
+		// 立即初始化：initDb 内部已处理 plusready 等待，页面查询会通过 waitForDb 排队
 		this.initDatabase();
 	},
 	onShow: function () {
@@ -18,11 +18,22 @@ export default {
 			// 浏览器环境会自动使用IndexedDB
 			// App环境会使用plus.sqlite
 			initDb().then(() => {
-				console.log('数据库初始化成功');
+				console.log('数据库初始化成功，存储后端:', hasPlusSqlite() ? 'SQLite' : 'IndexedDB');
 			}).catch(err => {
-				console.warn('数据库初始化失败，使用模拟数据:', err);
-				// 初始化失败时使用模拟数据
-				console.log('使用模拟数据');
+				console.warn('数据库初始化失败:', err);
+				// #ifdef APP-PLUS
+				const msg = err && (err.message || err.msg) ? String(err.message || err.msg) : String(err);
+				uni.showModal({
+					title: '数据库初始化失败',
+					content: msg + '\n\n可在「数据管理」页重新导入数据库，或把 car_management.db 复制到手机「Download」目录后点【重试】。',
+					confirmText: '重试',
+					success: (res) => {
+						if (res.confirm) {
+							this.initDatabase();
+						}
+					}
+				});
+				// #endif
 			});
 		}
 	}

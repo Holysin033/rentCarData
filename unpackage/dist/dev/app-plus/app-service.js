@@ -39,8 +39,16 @@ if (uni.restoreGlobal) {
     }
   }
   const dbName = "car_management";
+  const dbVersion = 2;
   let db = null;
   let indexedDb = null;
+  let initPromise = null;
+  const DB_DOWNLOAD_CANDIDATES = [
+    "/storage/emulated/0/Download/car_management.db",
+    "file:///storage/emulated/0/Download/car_management.db",
+    "_downloads/car_management.db"
+  ];
+  const DB_IMPORT_MARK_KEY = "db_imported_mark";
   function hasPlusSqlite() {
     return typeof plus !== "undefined" && plus.sqlite && typeof plus.sqlite.openDatabase === "function" && typeof plus.sqlite.executeSql === "function" && typeof plus.sqlite.selectSql === "function";
   }
@@ -63,11 +71,22 @@ if (uni.restoreGlobal) {
       return "'" + String(v).replace(/'/g, "''") + "'";
     });
   }
-  function initDb() {
-    return new Promise((resolve, reject) => {
+  function initDb(skipImport = false) {
+    if (initPromise) {
+      return initPromise;
+    }
+    initPromise = new Promise((resolve, reject) => {
       const runInit = () => {
         if (hasPlusSqlite()) {
-          initPlusSqlite().then(resolve).catch(reject);
+          if (skipImport) {
+            initPlusSqlite().then(resolve).catch(reject);
+            return;
+          }
+          importDbFrom(DB_DOWNLOAD_CANDIDATES).then((res) => {
+            if (res && res.installed) {
+              formatAppLog("log", "at utils/db.js:71", "已导入数据库:", res.source);
+            }
+          }).then(() => initPlusSqlite()).then(resolve).catch(reject);
         } else {
           initIndexedDB().then(resolve).catch(reject);
         }
@@ -80,10 +99,35 @@ if (uni.restoreGlobal) {
         runInit();
       }
     });
+    initPromise.catch(() => {
+      initPromise = null;
+    });
+    return initPromise;
+  }
+  function waitForDb() {
+    if (db) {
+      return Promise.resolve();
+    }
+    if (initPromise) {
+      return initPromise.then(() => {
+        if (!db) {
+          throw "数据库未初始化";
+        }
+      });
+    }
+    return Promise.reject("数据库未初始化");
   }
   function initIndexedDB() {
     return new Promise((resolve, reject) => {
-      const request = indexedDB.open(dbName, 1);
+      if (typeof indexedDB === "undefined") {
+        reject("当前环境不支持IndexedDB");
+        return;
+      }
+      if (indexedDb) {
+        resolve();
+        return;
+      }
+      const request = indexedDB.open(dbName, dbVersion);
       request.onerror = function(event) {
         reject("IndexedDB打开失败: " + event.target.error);
       };
@@ -93,26 +137,35 @@ if (uni.restoreGlobal) {
         resolve();
       };
       request.onupgradeneeded = function(event) {
-        const db2 = event.target.result;
-        if (!db2.objectStoreNames.contains("car")) {
-          db2.createObjectStore("car", { keyPath: "id", autoIncrement: true });
-        }
-        if (!db2.objectStoreNames.contains("insurance")) {
-          db2.createObjectStore("insurance", { keyPath: "id", autoIncrement: true });
-        }
-        if (!db2.objectStoreNames.contains("maintenance")) {
-          db2.createObjectStore("maintenance", { keyPath: "id", autoIncrement: true });
-        }
-        if (!db2.objectStoreNames.contains("rental")) {
-          db2.createObjectStore("rental", { keyPath: "id", autoIncrement: true });
-        }
-        if (!db2.objectStoreNames.contains("statistics_config")) {
-          db2.createObjectStore("statistics_config", { keyPath: "id", autoIncrement: true });
-        }
+        const idb = event.target.result;
+        const upgradeTx = event.target.transaction;
+        const ensureStore = (name) => {
+          if (!idb.objectStoreNames.contains(name)) {
+            return idb.createObjectStore(name, { keyPath: "id", autoIncrement: true });
+          }
+          return upgradeTx.objectStore(name);
+        };
+        const ensureIndex = (store, indexName, keyPath) => {
+          if (store && !store.indexNames.contains(indexName)) {
+            store.createIndex(indexName, keyPath, { unique: false });
+          }
+        };
+        ensureIndex(ensureStore("car"), "name", "name");
+        const insuranceStore = ensureStore("insurance");
+        ensureIndex(insuranceStore, "carId", "carId");
+        ensureIndex(insuranceStore, "expireDate", "expireDate");
+        const maintenanceStore = ensureStore("maintenance");
+        ensureIndex(maintenanceStore, "carId", "carId");
+        ensureIndex(maintenanceStore, "maintenanceDate", "maintenanceDate");
+        const rentalStore = ensureStore("rental");
+        ensureIndex(rentalStore, "carId", "carId");
+        ensureIndex(rentalStore, "carName", "carName");
+        ensureIndex(rentalStore, "startDate", "startDate");
+        ensureStore("statistics_config");
       };
     });
   }
-  function initPlusSqlite() {
+  function initPlusSqlite(stage = 0) {
     return new Promise((resolve, reject) => {
       plus.sqlite.openDatabase({
         name: dbName,
@@ -122,10 +175,295 @@ if (uni.restoreGlobal) {
           createTables().then(resolve).catch(reject);
         },
         fail: function(e) {
-          reject(e);
+          if (!isDbCantOpenError(e) || stage >= 2) {
+            reject(e);
+            return;
+          }
+          if (stage === 0) {
+            prepareDbForRetry().then(() => initPlusSqlite(1)).then(resolve).catch(reject);
+          } else {
+            rebuildDbFile().then(() => initPlusSqlite(2)).then(resolve).catch((err) => {
+              reject({
+                code: -1404,
+                message: "数据库文件不可读，自动修复失败：" + toErrText(err) + "。请彻底关闭 App（从后台移除）后删除 car_management.db-journal，再替换 car_management.db 并重新启动。"
+              });
+            });
+          }
         }
       });
     });
+  }
+  function isDbCantOpenError(e) {
+    if (!e) {
+      return false;
+    }
+    const text = typeof e === "string" ? e : e.message || e.msg || e.error || "";
+    return e.code === -1404 || /CantOpen|not readable|Unable to open database/i.test(String(text));
+  }
+  function toErrText(err) {
+    if (!err) {
+      return "未知错误";
+    }
+    if (typeof err === "string") {
+      return err;
+    }
+    return String(err.message || err.msg || err.error || JSON.stringify(err));
+  }
+  function prepareDbForRetry() {
+    return new Promise((resolve) => {
+      tryChmodDbFile();
+      if (typeof plus === "undefined" || !plus.io) {
+        resolve();
+        return;
+      }
+      plus.io.resolveLocalFileSystemURL("_doc/" + dbName + ".db-journal", function(entry) {
+        entry.remove(function() {
+          resolve();
+        }, function() {
+          resolve();
+        });
+      }, function() {
+        resolve();
+      });
+    });
+  }
+  function tryChmodDbFile() {
+    try {
+      const File = plus.android.importClass("java.io.File");
+      const file = new File(plus.io.convertLocalFileSystemURL("_doc/" + dbName + ".db"));
+      if (file.exists()) {
+        file.setReadable(true, false);
+        file.setWritable(true, false);
+      }
+    } catch (e) {
+    }
+  }
+  function replaceDocDbFile(sourceUrl) {
+    return new Promise((resolve, reject) => {
+      if (typeof plus === "undefined" || !plus.io) {
+        reject("plus.io 不可用");
+        return;
+      }
+      const targetName = dbName + ".db";
+      const tempName = dbName + "_rebuild.db";
+      const journalName = targetName + "-journal";
+      const removeQuiet = (name, next) => {
+        plus.io.resolveLocalFileSystemURL("_doc/" + name, function(entry) {
+          entry.remove(function() {
+            next();
+          }, function() {
+            next();
+          });
+        }, function() {
+          next();
+        });
+      };
+      plus.io.resolveLocalFileSystemURL("_doc/", function(dirEntry) {
+        plus.io.resolveLocalFileSystemURL(sourceUrl, function(srcEntry) {
+          removeQuiet(tempName, function() {
+            srcEntry.copyTo(dirEntry, tempName, function() {
+              removeQuiet(targetName, function() {
+                removeQuiet(journalName, function() {
+                  plus.io.resolveLocalFileSystemURL("_doc/" + tempName, function(tempEntry) {
+                    tempEntry.moveTo(dirEntry, targetName, function() {
+                      resolve();
+                    }, function(err) {
+                      reject("替换数据库文件失败：" + toErrText(err));
+                    });
+                  }, function(err) {
+                    reject("临时数据库文件解析失败：" + toErrText(err));
+                  });
+                });
+              });
+            }, function(err) {
+              reject("数据库文件不可读：" + toErrText(err));
+            });
+          });
+        }, function(err) {
+          reject("未找到数据库文件：" + toErrText(err));
+        });
+      }, function(err) {
+        reject("无法访问 _doc 目录：" + toErrText(err));
+      });
+    });
+  }
+  function rebuildDbFile() {
+    return replaceDocDbFile("_doc/" + dbName + ".db");
+  }
+  function importDbFrom(candidates, force = false) {
+    return new Promise((resolve) => {
+      if (typeof plus === "undefined" || !plus.io) {
+        resolve({ installed: false });
+        return;
+      }
+      const mark = readImportMark();
+      const tryNext = (index) => {
+        if (index >= candidates.length) {
+          resolve({ installed: false });
+          return;
+        }
+        const url = candidates[index];
+        plus.io.resolveLocalFileSystemURL(url, function(fileEntry) {
+          const doImport = (fingerprint) => {
+            replaceDocDbFile(url).then(() => {
+              if (fingerprint) {
+                writeImportMark(fingerprint);
+              }
+              resolve({ installed: true, source: url });
+            }).catch(() => {
+              tryNext(index + 1);
+            });
+          };
+          fileEntry.getMetadata(function(meta) {
+            const fingerprint = url + "|" + meta.size + "|" + meta.modificationTime;
+            if (!force && mark === fingerprint) {
+              resolve({ installed: false, skipped: true });
+              return;
+            }
+            doImport(fingerprint);
+          }, function() {
+            doImport("");
+          });
+        }, function() {
+          tryNext(index + 1);
+        });
+      };
+      tryNext(0);
+    });
+  }
+  function importDbFromBase64(base64) {
+    if (!base64) {
+      return Promise.reject("文件内容为空");
+    }
+    const tempName = dbName + "_import.db";
+    return closeDb().catch(() => {
+    }).then(() => {
+      db = null;
+      initPromise = null;
+      return writeDocFile(tempName, base64);
+    }).then(() => replaceDocDbFile("_doc/" + tempName)).then(() => initDb(true));
+  }
+  function exportDbToDownload() {
+    const fileName = "car_management_" + formatStamp() + ".db";
+    return closeDb().catch(() => {
+    }).then(() => {
+      db = null;
+      initPromise = null;
+      return readDocDbBase64();
+    }).then((dataUrl) => {
+      const base64 = String(dataUrl).replace(/^data:.*?,/, "");
+      return saveToDownloads(fileName, base64);
+    }).then(() => initDb(true)).then(() => fileName).catch((err) => {
+      return initDb(true).catch(() => {
+      }).then(() => {
+        throw err;
+      });
+    });
+  }
+  function writeDocFile(name, base64) {
+    return new Promise((resolve, reject) => {
+      if (typeof plus === "undefined" || !plus.io) {
+        reject("plus.io 不可用");
+        return;
+      }
+      plus.io.resolveLocalFileSystemURL("_doc/", function(dirEntry) {
+        const createAndWrite = function() {
+          dirEntry.getFile(name, { create: true }, function(fileEntry) {
+            fileEntry.createWriter(function(writer) {
+              writer.onwrite = function() {
+                resolve();
+              };
+              writer.onerror = function(e) {
+                reject("写入文件失败：" + toErrText(e));
+              };
+              writer.writeAsBinary(base64);
+            }, function(e) {
+              reject("创建写入器失败：" + toErrText(e));
+            });
+          }, function(e) {
+            reject("创建文件失败：" + toErrText(e));
+          });
+        };
+        plus.io.resolveLocalFileSystemURL("_doc/" + name, function(entry) {
+          entry.remove(createAndWrite, createAndWrite);
+        }, createAndWrite);
+      }, function(e) {
+        reject("无法访问 _doc 目录：" + toErrText(e));
+      });
+    });
+  }
+  function readDocDbBase64() {
+    return new Promise((resolve, reject) => {
+      plus.io.resolveLocalFileSystemURL("_doc/" + dbName + ".db", function(entry) {
+        entry.file(function(file) {
+          const reader = new plus.io.FileReader();
+          reader.onloadend = function(e) {
+            resolve(String(e.target && e.target.result || ""));
+          };
+          reader.onerror = function() {
+            reject("读取数据库文件失败");
+          };
+          reader.readAsDataURL(file);
+        }, function() {
+          reject("读取数据库文件失败");
+        });
+      }, function() {
+        reject("未找到数据库文件");
+      });
+    });
+  }
+  function saveToDownloads(fileName, base64) {
+    return new Promise((resolve, reject) => {
+      try {
+        const version = parseInt(plus.os.version, 10) || 0;
+        if (version < 10) {
+          reject("系统版本低于 Android 10，暂不支持导出到 Download 目录");
+          return;
+        }
+        const Uri = plus.android.importClass("android.net.Uri");
+        const Base64 = plus.android.importClass("android.util.Base64");
+        const values = plus.android.newObject("android.content.ContentValues");
+        plus.android.invoke(values, "put", "_display_name", fileName);
+        plus.android.invoke(values, "put", "mime_type", "application/octet-stream");
+        const main = plus.android.runtimeMainActivity();
+        const resolver = plus.android.invoke(main, "getContentResolver");
+        const collection = Uri.parse("content://media/external/downloads");
+        const uri = plus.android.invoke(resolver, "insert", collection, values);
+        if (!uri) {
+          reject("无法在 Download 目录创建文件");
+          return;
+        }
+        const out = plus.android.invoke(resolver, "openOutputStream", uri);
+        if (!out) {
+          reject("无法写入 Download 目录");
+          return;
+        }
+        plus.android.invoke(out, "write", Base64.decode(base64, 0));
+        plus.android.invoke(out, "flush");
+        plus.android.invoke(out, "close");
+        resolve();
+      } catch (e) {
+        reject("导出失败：" + toErrText(e));
+      }
+    });
+  }
+  function formatStamp() {
+    const d = /* @__PURE__ */ new Date();
+    const p = (n) => n < 10 ? "0" + n : String(n);
+    return String(d.getFullYear()) + p(d.getMonth() + 1) + p(d.getDate()) + "_" + p(d.getHours()) + p(d.getMinutes());
+  }
+  function readImportMark() {
+    try {
+      return uni.getStorageSync(DB_IMPORT_MARK_KEY) || "";
+    } catch (e) {
+      return "";
+    }
+  }
+  function writeImportMark(fingerprint) {
+    try {
+      uni.setStorageSync(DB_IMPORT_MARK_KEY, fingerprint);
+    } catch (e) {
+    }
   }
   function createTables() {
     return new Promise((resolve, reject) => {
@@ -246,11 +584,7 @@ if (uni.restoreGlobal) {
     });
   }
   function executeSql(sql, params = []) {
-    return new Promise((resolve, reject) => {
-      if (!db) {
-        reject("数据库未初始化");
-        return;
-      }
+    return waitForDb().then(() => new Promise((resolve, reject) => {
       if (useIndexedDbStorage()) {
         executeIndexedDb(sql, params).then(resolve).catch(reject);
       } else {
@@ -266,14 +600,10 @@ if (uni.restoreGlobal) {
           }
         });
       }
-    });
+    }));
   }
   function query(sql, params = []) {
-    return new Promise((resolve, reject) => {
-      if (!db) {
-        reject("数据库未初始化");
-        return;
-      }
+    return waitForDb().then(() => new Promise((resolve, reject) => {
       if (useIndexedDbStorage()) {
         queryIndexedDb(sql, params).then(resolve).catch(reject);
       } else {
@@ -283,6 +613,33 @@ if (uni.restoreGlobal) {
           sql: boundSql,
           success: function(res) {
             resolve(res);
+          },
+          fail: function(e) {
+            reject(e);
+          }
+        });
+      }
+    }));
+  }
+  function closeDb() {
+    return new Promise((resolve, reject) => {
+      if (!db) {
+        resolve();
+        return;
+      }
+      if (useIndexedDbStorage()) {
+        if (indexedDb) {
+          indexedDb.close();
+          indexedDb = null;
+        }
+        db = null;
+        resolve();
+      } else {
+        plus.sqlite.closeDatabase({
+          name: dbName,
+          success: function() {
+            db = null;
+            resolve();
           },
           fail: function(e) {
             reject(e);
@@ -402,116 +759,259 @@ if (uni.restoreGlobal) {
   }
   function queryIndexedDb(sql, params) {
     return new Promise((resolve, reject) => {
-      try {
-        const lowerSql = sql.toLowerCase();
-        let tableName = "";
-        if (lowerSql.startsWith("select")) {
-          tableName = lowerSql.match(/from\s+(\w+)/)[1];
-        }
-        if (!tableName) {
-          reject("不支持的SQL查询");
-          return;
-        }
-        const transaction = indexedDb.transaction([tableName], "readonly");
-        const store = transaction.objectStore(tableName);
-        const request = store.getAll();
-        request.onsuccess = function(event) {
-          let result = event.target.result;
-          const whereMatch = sql.match(/WHERE\s+([^;]+)/i);
-          if (whereMatch) {
-            const whereClause = whereMatch[1];
-            if (whereClause.includes("id = ?") && params.length > 0) {
-              const id = params[0];
-              result = result.filter((item) => item.id == id);
-            } else if (whereClause.includes("carId = ?") && params.length > 0) {
-              const carId = params[0];
-              result = result.filter((item) => item.carId == carId);
-            } else if (whereClause.includes("substr") && params.length > 0) {
-              const value = params[0];
-              result = result.filter((item) => {
-                if (whereClause.includes("startDate")) {
-                  return item.startDate && item.startDate.substring(0, 7) == value;
-                } else if (whereClause.includes("maintenanceDate")) {
-                  return item.maintenanceDate && item.maintenanceDate.substring(0, 7) == value;
-                }
-                return false;
-              });
-            }
-          }
-          const groupMatch = sql.match(/group by\s+([^;]+)/i);
-          if (groupMatch) {
-            const groupField = groupMatch[1].trim();
-            const sumMatch = sql.match(/sum\s*\(.*?\)\s*as\s*(\w+)/i);
-            if (sumMatch) {
-              const sumField = sumMatch[1];
-              const groupedData = {};
-              result.forEach((item) => {
-                let groupKey;
-                if (groupField === "substr(startDate, 1, 7)") {
-                  groupKey = item.startDate ? item.startDate.substring(0, 7) : "";
-                } else if (groupField === "carName") {
-                  groupKey = item.carName || "";
-                } else {
-                  groupKey = item[groupField] || "";
-                }
-                if (!groupedData[groupKey]) {
-                  groupedData[groupKey] = 0;
-                }
-                const amount = item.changedTotalAmount || item.initialTotalAmount || 0;
-                groupedData[groupKey] += amount;
-              });
-              result = Object.entries(groupedData).map(([key, value]) => {
-                const item = {};
-                if (groupField === "substr(startDate, 1, 7)") {
-                  item.month = key;
-                } else if (groupField === "carName") {
-                  item.carName = key;
-                  item.count = result.filter((i) => i.carName === key).length;
-                } else {
-                  item[groupField] = key;
-                }
-                item[sumField] = value;
-                return item;
-              });
-            }
-          }
-          const orderMatch = sql.match(/order by\s+([^;]+)/i);
-          if (orderMatch) {
-            const orderClause = orderMatch[1].trim();
-            if (orderClause.includes("desc")) {
-              const field = orderClause.replace("desc", "").trim();
-              result.sort((a, b) => {
-                if (typeof a[field] === "string" && typeof b[field] === "string") {
-                  return b[field].localeCompare(a[field]);
-                } else {
-                  return b[field] - a[field];
-                }
-              });
-            } else if (orderClause.includes("asc")) {
-              const field = orderClause.replace("asc", "").trim();
-              result.sort((a, b) => {
-                if (typeof a[field] === "string" && typeof b[field] === "string") {
-                  return a[field].localeCompare(b[field]);
-                } else {
-                  return a[field] - b[field];
-                }
-              });
-            }
-          }
-          const limitMatch = sql.match(/limit\s+(\d+)/i);
-          if (limitMatch) {
-            const limit = parseInt(limitMatch[1]);
+      if (!indexedDb) {
+        reject("数据库未初始化");
+        return;
+      }
+      const fromMatch = sql.match(/\bfrom\s+(\w+)/i);
+      if (!fromMatch) {
+        reject("不支持的SQL查询");
+        return;
+      }
+      const tableName = fromMatch[1];
+      const where = parseWhereClause(sql);
+      readRows(tableName, where, params).then((rows) => {
+        try {
+          const aliases = parseSelectAliases(sql);
+          const aggregates = parseAggregates(sql);
+          const groupBy = parseGroupBy(sql);
+          const orderBy = parseOrderBy(sql);
+          const limit = parseLimit(sql);
+          let result = groupBy || aggregates.length ? aggregateRows(rows, groupBy, aggregates, aliases) : rows;
+          result = sortRows(result, orderBy);
+          if (limit > 0) {
             result = result.slice(0, limit);
           }
           resolve(result);
-        };
-        request.onerror = function(event) {
-          reject(event.target.error);
-        };
+        } catch (error) {
+          reject(error);
+        }
+      }).catch(reject);
+    });
+  }
+  function parseWhereClause(sql) {
+    const m = sql.match(/where\s+([\s\S]+?)(?:\s+order\s+by\s|\s+group\s+by\s|\s+limit\s|;|$)/i);
+    if (!m) {
+      return null;
+    }
+    const clause = m[1].trim();
+    if (/^id\s*=\s*\?$/i.test(clause)) {
+      return { kind: "id" };
+    }
+    if (/^carid\s*=\s*\?$/i.test(clause)) {
+      return { kind: "carId" };
+    }
+    const sub = clause.match(/^substr\s*\(\s*(\w+)\s*,\s*(\d+)\s*,\s*(\d+)\s*\)\s*=\s*\?$/i);
+    if (sub) {
+      return { kind: "substr", field: sub[1], start: parseInt(sub[2], 10), len: parseInt(sub[3], 10) };
+    }
+    const eq = clause.match(/^(\w+)\s*=\s*\?$/i);
+    if (eq) {
+      return { kind: "eq", field: eq[1] };
+    }
+    return null;
+  }
+  function parseSelectAliases(sql) {
+    const fromIndex = sql.search(/\bfrom\b/i);
+    const selectList = fromIndex > 0 ? sql.substring(0, fromIndex) : sql;
+    const aliases = {};
+    const re = /(substr\s*\(\s*(\w+)\s*,\s*(\d+)\s*,\s*(\d+)\s*\)|\w+)\s+as\s+(\w+)/gi;
+    let m;
+    while (m = re.exec(selectList)) {
+      const alias = m[5];
+      if (m[2]) {
+        aliases[alias] = { kind: "substr", field: m[2], start: parseInt(m[3], 10), len: parseInt(m[4], 10) };
+      } else {
+        aliases[alias] = { kind: "field", field: m[1] };
+      }
+    }
+    return aliases;
+  }
+  function parseAggregates(sql) {
+    const fromIndex = sql.search(/\bfrom\b/i);
+    const selectList = fromIndex > 0 ? sql.substring(0, fromIndex) : sql;
+    const list = [];
+    let m;
+    const sumRe = /sum\s*\(([\s\S]*?)\)\s+as\s+(\w+)/gi;
+    while (m = sumRe.exec(selectList)) {
+      list.push({ type: "sum", expr: m[1].trim(), alias: m[2] });
+    }
+    const countRe = /count\s*\(\s*(?:\*|[\w.]+)\s*\)\s+as\s+(\w+)/gi;
+    while (m = countRe.exec(selectList)) {
+      list.push({ type: "count", alias: m[1] });
+    }
+    return list;
+  }
+  function parseGroupBy(sql) {
+    const m = sql.match(/group\s+by\s+([\s\S]+?)(?:\s+order\s+by\s|\s+limit\s|;|$)/i);
+    return m ? m[1].trim() : null;
+  }
+  function parseOrderBy(sql) {
+    const m = sql.match(/order\s+by\s+([\s\S]+?)(?:\s+limit\s|;|$)/i);
+    if (!m) {
+      return [];
+    }
+    return m[1].split(",").map((part) => {
+      const text = part.trim().replace(/\s+/g, " ");
+      if (!text) {
+        return null;
+      }
+      const desc = /\bdesc\b/i.test(text);
+      const field = text.replace(/\b(asc|desc)\b/gi, "").trim();
+      return field ? { field, desc } : null;
+    }).filter(Boolean);
+  }
+  function parseLimit(sql) {
+    const m = sql.match(/limit\s+(\d+)/i);
+    return m ? parseInt(m[1], 10) : 0;
+  }
+  function sumExprValue(expr, row) {
+    const text = String(expr || "").trim();
+    const caseMatch = text.match(
+      /^case\s+when\s+(\w+)\s+is\s+not\s+null\s+then\s+(\w+)\s+else\s+(\w+)\s+end$/i
+    );
+    let field;
+    if (caseMatch) {
+      field = row[caseMatch[1]] != null ? caseMatch[2] : caseMatch[3];
+    } else {
+      field = text.replace(/[^A-Za-z0-9_]/g, "");
+    }
+    const value = parseFloat(row[field]);
+    return Number.isFinite(value) ? value : 0;
+  }
+  function groupKeyValue(row, groupToken, aliases) {
+    const token = String(groupToken).trim();
+    const inline = token.match(/^substr\s*\(\s*(\w+)\s*,\s*(\d+)\s*,\s*(\d+)\s*\)$/i);
+    if (inline) {
+      const value2 = row[inline[1]];
+      return value2 == null ? "" : String(value2).substr(parseInt(inline[2], 10) - 1, parseInt(inline[3], 10));
+    }
+    const alias = aliases[token];
+    if (alias && alias.kind === "substr") {
+      const value2 = row[alias.field];
+      return value2 == null ? "" : String(value2).substr(alias.start - 1, alias.len);
+    }
+    const field = alias && alias.kind === "field" ? alias.field : token;
+    const value = row[field];
+    return value == null ? "" : String(value);
+  }
+  function aggregateRows(rows, groupBy, aggregates, aliases) {
+    const buildRow = (groupRows, key) => {
+      const out = {};
+      if (groupBy) {
+        out[groupBy] = key;
+      }
+      aggregates.forEach((agg) => {
+        if (agg.type === "count") {
+          out[agg.alias] = groupRows.length;
+        } else {
+          let total = 0;
+          groupRows.forEach((row) => {
+            total += sumExprValue(agg.expr, row);
+          });
+          out[agg.alias] = total;
+        }
+      });
+      return out;
+    };
+    if (!groupBy) {
+      return [buildRow(rows, "")];
+    }
+    const groups = /* @__PURE__ */ new Map();
+    rows.forEach((row) => {
+      const key = groupKeyValue(row, groupBy, aliases);
+      if (!groups.has(key)) {
+        groups.set(key, []);
+      }
+      groups.get(key).push(row);
+    });
+    return Array.from(groups.keys()).map((key) => buildRow(groups.get(key), key));
+  }
+  function sortRows(rows, orderBy) {
+    if (!orderBy || orderBy.length === 0) {
+      return rows;
+    }
+    const copy = rows.slice();
+    copy.sort((a, b) => {
+      for (let i = 0; i < orderBy.length; i++) {
+        const { field, desc } = orderBy[i];
+        const av = a[field];
+        const bv = b[field];
+        let cmp;
+        if (typeof av === "string" || typeof bv === "string") {
+          cmp = String(av == null ? "" : av).localeCompare(String(bv == null ? "" : bv));
+        } else {
+          cmp = (Number(av) || 0) - (Number(bv) || 0);
+        }
+        if (cmp !== 0) {
+          return desc ? -cmp : cmp;
+        }
+      }
+      return 0;
+    });
+    return copy;
+  }
+  function readRows(tableName, where, params) {
+    return new Promise((resolve, reject) => {
+      const fail = (event) => reject(event && event.target && event.target.error || new Error("IndexedDB读取失败"));
+      let transaction;
+      try {
+        transaction = indexedDb.transaction([tableName], "readonly");
       } catch (error) {
         reject(error);
+        return;
       }
+      const store = transaction.objectStore(tableName);
+      if (where && where.kind === "id" && params && params.length > 0) {
+        const req = store.get(params[0]);
+        req.onsuccess = () => resolve(req.result ? [req.result] : []);
+        req.onerror = fail;
+        return;
+      }
+      if (where && where.kind === "carId" && params && params.length > 0) {
+        const key = params[0];
+        const hasIndex = store.indexNames && store.indexNames.contains("carId");
+        if (hasIndex) {
+          const indexReq = store.index("carId").getAll(key);
+          indexReq.onsuccess = () => {
+            if (indexReq.result && indexReq.result.length > 0) {
+              resolve(indexReq.result);
+              return;
+            }
+            const allReq2 = store.getAll();
+            allReq2.onsuccess = () => resolve(filterRows(allReq2.result || [], where, params));
+            allReq2.onerror = fail;
+          };
+          indexReq.onerror = fail;
+          return;
+        }
+      }
+      const allReq = store.getAll();
+      allReq.onsuccess = () => resolve(filterRows(allReq.result || [], where, params));
+      allReq.onerror = fail;
     });
+  }
+  function filterRows(rows, where, params) {
+    if (!where || !params || params.length === 0) {
+      return rows;
+    }
+    if (where.kind === "id") {
+      return rows.filter((row) => row.id == params[0]);
+    }
+    if (where.kind === "carId") {
+      return rows.filter((row) => row.carId == params[0]);
+    }
+    if (where.kind === "substr") {
+      const value = params[0];
+      return rows.filter((row) => {
+        const fieldValue = row[where.field];
+        return fieldValue != null && String(fieldValue).substr(where.start - 1, where.len) == value;
+      });
+    }
+    if (where.kind === "eq") {
+      return rows.filter((row) => row[where.field] == params[0]);
+    }
+    return rows;
   }
   const _export_sfc = (sfc, props) => {
     const target = sfc.__vccOpts || sfc;
@@ -520,15 +1020,12 @@ if (uni.restoreGlobal) {
     }
     return target;
   };
-  const _sfc_main$d = {
+  const _sfc_main$f = {
     data() {
       return {
         carList: [],
         searchKeyword: ""
       };
-    },
-    onLoad() {
-      this.loadCarList();
     },
     onShow() {
       this.loadCarList();
@@ -548,66 +1045,57 @@ if (uni.restoreGlobal) {
       loadCarList() {
         const sql = `SELECT * FROM car ORDER BY id DESC`;
         query(sql).then((res) => {
-          this.carList = res || [];
-          this.carList.forEach((car) => {
-            car.latestMaintenance = "无";
-            car.latestInsurance = "无";
-            query(`SELECT maintenanceDate FROM maintenance WHERE carId = ? ORDER BY maintenanceDate DESC LIMIT 1`, [car.id]).then((maintenanceRes) => {
-              if (maintenanceRes && maintenanceRes.length > 0) {
-                car.latestMaintenance = maintenanceRes[0].maintenanceDate;
-              }
-            });
-            query(`SELECT expireDate FROM insurance WHERE carId = ? ORDER BY expireDate DESC LIMIT 1`, [car.id]).then((insuranceRes) => {
-              if (insuranceRes && insuranceRes.length > 0) {
-                car.latestInsurance = insuranceRes[0].expireDate;
-              }
-            });
-          });
-          if (this.carList.length === 0) {
-            this.carList = [
-              {
-                id: 1,
-                name: "大众朗逸",
-                carNumber: "京A12345",
-                imagePath: "",
-                latestMaintenance: "2026-03-15",
-                latestInsurance: "2026-12-31"
-              },
-              {
-                id: 2,
-                name: "丰田凯美瑞",
-                carNumber: "京B67890",
-                imagePath: "",
-                latestMaintenance: "2026-02-20",
-                latestInsurance: "2026-11-30"
-              }
-            ];
-          }
+          this.carList = (res || []).map((car) => Object.assign({}, car, {
+            latestMaintenance: "无",
+            latestInsurance: "无"
+          }));
+          this.fillLatestDates();
         }).catch((err) => {
-          formatAppLog("error", "at pages/index/index.vue:129", "加载车辆列表失败:", err);
-          this.carList = [
-            {
-              id: 1,
-              name: "大众朗逸",
-              carNumber: "京A12345",
-              imagePath: "",
-              latestMaintenance: "2026-03-15",
-              latestInsurance: "2026-12-31"
-            },
-            {
-              id: 2,
-              name: "丰田凯美瑞",
-              carNumber: "京B67890",
-              imagePath: "",
-              latestMaintenance: "2026-02-20",
-              latestInsurance: "2026-11-30"
-            }
-          ];
+          formatAppLog("error", "at pages/index/index.vue:90", "加载车辆列表失败:", err);
+          this.carList = [];
+        });
+      },
+      /**
+       * 一次性批量读取保养/保险表，在内存中按 carId 取最新日期。
+       * 原实现每辆车各查 2 次（车辆 10 台就是 21 次查询），改为固定 2 次查询。
+       */
+      fillLatestDates() {
+        Promise.all([
+          query("SELECT carId, maintenanceDate FROM maintenance"),
+          query("SELECT carId, expireDate FROM insurance")
+        ]).then(([maintenanceRows, insuranceRows]) => {
+          const latestByCarId = (rows, dateField) => {
+            const map = {};
+            (rows || []).forEach((row) => {
+              const carId = row.carId;
+              if (carId == null) {
+                return;
+              }
+              const date = row[dateField] || "";
+              if (date && (!map[carId] || date > map[carId])) {
+                map[carId] = date;
+              }
+            });
+            return map;
+          };
+          const maintenanceMap = latestByCarId(maintenanceRows, "maintenanceDate");
+          const insuranceMap = latestByCarId(insuranceRows, "expireDate");
+          this.carList.forEach((car) => {
+            car.latestMaintenance = maintenanceMap[car.id] || "无";
+            car.latestInsurance = insuranceMap[car.id] || "无";
+          });
+        }).catch((err) => {
+          formatAppLog("warn", "at pages/index/index.vue:125", "加载保养/保险日期失败:", err);
         });
       },
       addCar() {
         uni.navigateTo({
           url: "./add-car"
+        });
+      },
+      openDataPage() {
+        uni.navigateTo({
+          url: "../data/data"
         });
       },
       editCar(item) {
@@ -629,7 +1117,7 @@ if (uni.restoreGlobal) {
                   icon: "success"
                 });
               }).catch((err) => {
-                formatAppLog("error", "at pages/index/index.vue:179", "删除失败:", err);
+                formatAppLog("error", "at pages/index/index.vue:161", "删除失败:", err);
                 this.carList = this.carList.filter((item) => item.id !== id);
                 uni.showToast({
                   title: "删除成功",
@@ -644,7 +1132,7 @@ if (uni.restoreGlobal) {
       }
     }
   };
-  function _sfc_render$c(_ctx, _cache, $props, $setup, $data, $options) {
+  function _sfc_render$e(_ctx, _cache, $props, $setup, $data, $options) {
     return vue.openBlock(), vue.createElementBlock("view", { class: "container" }, [
       vue.createElementVNode("view", { class: "header" }, [
         vue.createElementVNode("view", { class: "search-box" }, [
@@ -665,6 +1153,12 @@ if (uni.restoreGlobal) {
           ), [
             [vue.vModelText, $data.searchKeyword]
           ])
+        ]),
+        vue.createElementVNode("view", {
+          class: "header-action",
+          onClick: _cache[2] || (_cache[2] = (...args) => $options.openDataPage && $options.openDataPage(...args))
+        }, [
+          vue.createElementVNode("text", { class: "header-action-icon" }, "⋯")
         ])
       ]),
       vue.createElementVNode("view", { class: "car-list" }, [
@@ -740,13 +1234,13 @@ if (uni.restoreGlobal) {
       ]),
       vue.createElementVNode("view", {
         class: "fab-add",
-        onClick: _cache[2] || (_cache[2] = vue.withModifiers((...args) => $options.addCar && $options.addCar(...args), ["stop"]))
+        onClick: _cache[3] || (_cache[3] = vue.withModifiers((...args) => $options.addCar && $options.addCar(...args), ["stop"]))
       }, [
         vue.createElementVNode("text", { class: "fab-add-icon" }, "+")
       ])
     ]);
   }
-  const PagesIndexIndex = /* @__PURE__ */ _export_sfc(_sfc_main$d, [["render", _sfc_render$c], ["__scopeId", "data-v-1cf27b2a"], ["__file", "D:/newLearn/new_vue/projects/rentApp/rentData/pages/index/index.vue"]]);
+  const PagesIndexIndex = /* @__PURE__ */ _export_sfc(_sfc_main$f, [["render", _sfc_render$e], ["__scopeId", "data-v-1cf27b2a"], ["__file", "D:/newLearn/new_vue/projects/rentApp/rentData/pages/index/index.vue"]]);
   function chooseCarPhoto() {
     return new Promise((resolve, reject) => {
       uni.chooseImage({
@@ -778,7 +1272,7 @@ if (uni.restoreGlobal) {
       });
     });
   }
-  const _sfc_main$c = {
+  const _sfc_main$e = {
     data() {
       return {
         car: {
@@ -830,7 +1324,7 @@ if (uni.restoreGlobal) {
       }
     }
   };
-  function _sfc_render$b(_ctx, _cache, $props, $setup, $data, $options) {
+  function _sfc_render$d(_ctx, _cache, $props, $setup, $data, $options) {
     return vue.openBlock(), vue.createElementBlock("view", { class: "container" }, [
       vue.createElementVNode("view", { class: "form" }, [
         vue.createElementVNode("view", { class: "form-item" }, [
@@ -913,8 +1407,8 @@ if (uni.restoreGlobal) {
       ])
     ]);
   }
-  const PagesIndexAddCar = /* @__PURE__ */ _export_sfc(_sfc_main$c, [["render", _sfc_render$b], ["__scopeId", "data-v-a389b924"], ["__file", "D:/newLearn/new_vue/projects/rentApp/rentData/pages/index/add-car.vue"]]);
-  const _sfc_main$b = {
+  const PagesIndexAddCar = /* @__PURE__ */ _export_sfc(_sfc_main$e, [["render", _sfc_render$d], ["__scopeId", "data-v-a389b924"], ["__file", "D:/newLearn/new_vue/projects/rentApp/rentData/pages/index/add-car.vue"]]);
+  const _sfc_main$d = {
     data() {
       return {
         car: {
@@ -994,7 +1488,7 @@ if (uni.restoreGlobal) {
       }
     }
   };
-  function _sfc_render$a(_ctx, _cache, $props, $setup, $data, $options) {
+  function _sfc_render$c(_ctx, _cache, $props, $setup, $data, $options) {
     return vue.openBlock(), vue.createElementBlock("view", { class: "container" }, [
       vue.createElementVNode("view", { class: "form" }, [
         vue.createElementVNode("view", { class: "form-item" }, [
@@ -1077,16 +1571,13 @@ if (uni.restoreGlobal) {
       ])
     ]);
   }
-  const PagesIndexEditCar = /* @__PURE__ */ _export_sfc(_sfc_main$b, [["render", _sfc_render$a], ["__scopeId", "data-v-adc15339"], ["__file", "D:/newLearn/new_vue/projects/rentApp/rentData/pages/index/edit-car.vue"]]);
-  const _sfc_main$a = {
+  const PagesIndexEditCar = /* @__PURE__ */ _export_sfc(_sfc_main$d, [["render", _sfc_render$c], ["__scopeId", "data-v-adc15339"], ["__file", "D:/newLearn/new_vue/projects/rentApp/rentData/pages/index/edit-car.vue"]]);
+  const _sfc_main$c = {
     data() {
       return {
         insuranceList: [],
         searchKeyword: ""
       };
-    },
-    onLoad() {
-      this.loadInsuranceList();
     },
     onShow() {
       this.loadInsuranceList();
@@ -1127,7 +1618,7 @@ if (uni.restoreGlobal) {
             ];
           }
         }).catch((err) => {
-          formatAppLog("error", "at pages/insurance/insurance.vue:92", "加载保险列表失败:", err);
+          formatAppLog("error", "at pages/insurance/insurance.vue:89", "加载保险列表失败:", err);
           this.insuranceList = [
             {
               id: 1,
@@ -1186,7 +1677,7 @@ if (uni.restoreGlobal) {
                   icon: "success"
                 });
               }).catch((err) => {
-                formatAppLog("error", "at pages/insurance/insurance.vue:160", "删除失败:", err);
+                formatAppLog("error", "at pages/insurance/insurance.vue:157", "删除失败:", err);
                 this.insuranceList = this.insuranceList.filter((item) => item.id !== id);
                 uni.showToast({
                   title: "删除成功",
@@ -1201,7 +1692,7 @@ if (uni.restoreGlobal) {
       }
     }
   };
-  function _sfc_render$9(_ctx, _cache, $props, $setup, $data, $options) {
+  function _sfc_render$b(_ctx, _cache, $props, $setup, $data, $options) {
     return vue.openBlock(), vue.createElementBlock("view", { class: "container" }, [
       vue.createElementVNode("view", { class: "header" }, [
         vue.createElementVNode("view", { class: "search-box" }, [
@@ -1287,8 +1778,8 @@ if (uni.restoreGlobal) {
       ])
     ]);
   }
-  const PagesInsuranceInsurance = /* @__PURE__ */ _export_sfc(_sfc_main$a, [["render", _sfc_render$9], ["__scopeId", "data-v-4afc8b09"], ["__file", "D:/newLearn/new_vue/projects/rentApp/rentData/pages/insurance/insurance.vue"]]);
-  const _sfc_main$9 = {
+  const PagesInsuranceInsurance = /* @__PURE__ */ _export_sfc(_sfc_main$c, [["render", _sfc_render$b], ["__scopeId", "data-v-4afc8b09"], ["__file", "D:/newLearn/new_vue/projects/rentApp/rentData/pages/insurance/insurance.vue"]]);
+  const _sfc_main$b = {
     data() {
       return {
         carList: [],
@@ -1385,7 +1876,7 @@ if (uni.restoreGlobal) {
       }
     }
   };
-  function _sfc_render$8(_ctx, _cache, $props, $setup, $data, $options) {
+  function _sfc_render$a(_ctx, _cache, $props, $setup, $data, $options) {
     var _a;
     return vue.openBlock(), vue.createElementBlock("view", { class: "container" }, [
       vue.createElementVNode("view", { class: "form" }, [
@@ -1469,8 +1960,8 @@ if (uni.restoreGlobal) {
       ])
     ]);
   }
-  const PagesInsuranceAddInsurance = /* @__PURE__ */ _export_sfc(_sfc_main$9, [["render", _sfc_render$8], ["__scopeId", "data-v-08dc6034"], ["__file", "D:/newLearn/new_vue/projects/rentApp/rentData/pages/insurance/add-insurance.vue"]]);
-  const _sfc_main$8 = {
+  const PagesInsuranceAddInsurance = /* @__PURE__ */ _export_sfc(_sfc_main$b, [["render", _sfc_render$a], ["__scopeId", "data-v-08dc6034"], ["__file", "D:/newLearn/new_vue/projects/rentApp/rentData/pages/insurance/add-insurance.vue"]]);
+  const _sfc_main$a = {
     data() {
       return {
         carList: [],
@@ -1597,7 +2088,7 @@ if (uni.restoreGlobal) {
       }
     }
   };
-  function _sfc_render$7(_ctx, _cache, $props, $setup, $data, $options) {
+  function _sfc_render$9(_ctx, _cache, $props, $setup, $data, $options) {
     var _a;
     return vue.openBlock(), vue.createElementBlock("view", { class: "container" }, [
       vue.createElementVNode("view", { class: "form" }, [
@@ -1681,16 +2172,13 @@ if (uni.restoreGlobal) {
       ])
     ]);
   }
-  const PagesInsuranceEditInsurance = /* @__PURE__ */ _export_sfc(_sfc_main$8, [["render", _sfc_render$7], ["__scopeId", "data-v-50aea87a"], ["__file", "D:/newLearn/new_vue/projects/rentApp/rentData/pages/insurance/edit-insurance.vue"]]);
-  const _sfc_main$7 = {
+  const PagesInsuranceEditInsurance = /* @__PURE__ */ _export_sfc(_sfc_main$a, [["render", _sfc_render$9], ["__scopeId", "data-v-50aea87a"], ["__file", "D:/newLearn/new_vue/projects/rentApp/rentData/pages/insurance/edit-insurance.vue"]]);
+  const _sfc_main$9 = {
     data() {
       return {
         maintenanceList: [],
         searchKeyword: ""
       };
-    },
-    onLoad() {
-      this.loadMaintenanceList();
     },
     onShow() {
       this.loadMaintenanceList();
@@ -1732,7 +2220,7 @@ if (uni.restoreGlobal) {
             ];
           }
         }).catch((err) => {
-          formatAppLog("error", "at pages/maintenance/maintenance.vue:93", "加载保养列表失败:", err);
+          formatAppLog("error", "at pages/maintenance/maintenance.vue:90", "加载保养列表失败:", err);
           this.maintenanceList = [
             {
               id: 1,
@@ -1777,7 +2265,7 @@ if (uni.restoreGlobal) {
                   icon: "success"
                 });
               }).catch((err) => {
-                formatAppLog("error", "at pages/maintenance/maintenance.vue:143", "删除失败:", err);
+                formatAppLog("error", "at pages/maintenance/maintenance.vue:140", "删除失败:", err);
                 this.maintenanceList = this.maintenanceList.filter((item) => item.id !== id);
                 uni.showToast({
                   title: "删除成功",
@@ -1792,7 +2280,7 @@ if (uni.restoreGlobal) {
       }
     }
   };
-  function _sfc_render$6(_ctx, _cache, $props, $setup, $data, $options) {
+  function _sfc_render$8(_ctx, _cache, $props, $setup, $data, $options) {
     return vue.openBlock(), vue.createElementBlock("view", { class: "container" }, [
       vue.createElementVNode("view", { class: "header" }, [
         vue.createElementVNode("view", { class: "search-box" }, [
@@ -1885,8 +2373,8 @@ if (uni.restoreGlobal) {
       ])
     ]);
   }
-  const PagesMaintenanceMaintenance = /* @__PURE__ */ _export_sfc(_sfc_main$7, [["render", _sfc_render$6], ["__scopeId", "data-v-e50a8caf"], ["__file", "D:/newLearn/new_vue/projects/rentApp/rentData/pages/maintenance/maintenance.vue"]]);
-  const _sfc_main$6 = {
+  const PagesMaintenanceMaintenance = /* @__PURE__ */ _export_sfc(_sfc_main$9, [["render", _sfc_render$8], ["__scopeId", "data-v-e50a8caf"], ["__file", "D:/newLearn/new_vue/projects/rentApp/rentData/pages/maintenance/maintenance.vue"]]);
+  const _sfc_main$8 = {
     data() {
       return {
         carList: [],
@@ -2003,7 +2491,7 @@ if (uni.restoreGlobal) {
       }
     }
   };
-  function _sfc_render$5(_ctx, _cache, $props, $setup, $data, $options) {
+  function _sfc_render$7(_ctx, _cache, $props, $setup, $data, $options) {
     var _a;
     return vue.openBlock(), vue.createElementBlock("view", { class: "container" }, [
       vue.createElementVNode("view", { class: "form" }, [
@@ -2103,8 +2591,8 @@ if (uni.restoreGlobal) {
       ])
     ]);
   }
-  const PagesMaintenanceAddMaintenance = /* @__PURE__ */ _export_sfc(_sfc_main$6, [["render", _sfc_render$5], ["__scopeId", "data-v-cf4facb6"], ["__file", "D:/newLearn/new_vue/projects/rentApp/rentData/pages/maintenance/add-maintenance.vue"]]);
-  const _sfc_main$5 = {
+  const PagesMaintenanceAddMaintenance = /* @__PURE__ */ _export_sfc(_sfc_main$8, [["render", _sfc_render$7], ["__scopeId", "data-v-cf4facb6"], ["__file", "D:/newLearn/new_vue/projects/rentApp/rentData/pages/maintenance/add-maintenance.vue"]]);
+  const _sfc_main$7 = {
     data() {
       return {
         carList: [],
@@ -2268,7 +2756,7 @@ if (uni.restoreGlobal) {
       }
     }
   };
-  function _sfc_render$4(_ctx, _cache, $props, $setup, $data, $options) {
+  function _sfc_render$6(_ctx, _cache, $props, $setup, $data, $options) {
     var _a;
     return vue.openBlock(), vue.createElementBlock("view", { class: "container" }, [
       vue.createElementVNode("view", { class: "form" }, [
@@ -2368,7 +2856,7 @@ if (uni.restoreGlobal) {
       ])
     ]);
   }
-  const PagesMaintenanceEditMaintenance = /* @__PURE__ */ _export_sfc(_sfc_main$5, [["render", _sfc_render$4], ["__scopeId", "data-v-b25d45f2"], ["__file", "D:/newLearn/new_vue/projects/rentApp/rentData/pages/maintenance/edit-maintenance.vue"]]);
+  const PagesMaintenanceEditMaintenance = /* @__PURE__ */ _export_sfc(_sfc_main$7, [["render", _sfc_render$6], ["__scopeId", "data-v-b25d45f2"], ["__file", "D:/newLearn/new_vue/projects/rentApp/rentData/pages/maintenance/edit-maintenance.vue"]]);
   const RENTAL_COLUMNS = [
     "id",
     "carId",
@@ -2564,7 +3052,7 @@ if (uni.restoreGlobal) {
       }, Promise.resolve()).then(() => ({ rowCount: rows.length }));
     });
   }
-  const _sfc_main$4 = {
+  const _sfc_main$6 = {
     data() {
       return {
         rentalList: [],
@@ -2580,9 +3068,6 @@ if (uni.restoreGlobal) {
         slideId: 0
       };
     },
-    onLoad() {
-      this.loadRentalList();
-    },
     onShow() {
       this.loadRentalList();
     },
@@ -2590,7 +3075,7 @@ if (uni.restoreGlobal) {
       loadRentalList() {
         const sql = `SELECT * FROM rental ORDER BY id DESC`;
         query(sql).then((res) => {
-          const rentals = res.sort((a, b) => b.id - a.id) || [];
+          const rentals = (res || []).sort((a, b) => b.id - a.id);
           this.rentalList = rentals.map((item) => {
             if (item.totalAmount && !item.initialTotalAmount) {
               item.initialTotalAmount = item.totalAmount;
@@ -2630,7 +3115,7 @@ if (uni.restoreGlobal) {
             ];
           }
         }).catch((err) => {
-          formatAppLog("error", "at pages/rental/rental.vue:152", "加载租赁列表失败:", err);
+          formatAppLog("error", "at pages/rental/rental.vue:149", "加载租赁列表失败:", err);
           this.rentalList = [
             {
               id: 1,
@@ -2690,7 +3175,7 @@ ${info.hint || ""}`;
             showCancel: false
           });
         }).catch((err) => {
-          formatAppLog("error", "at pages/rental/rental.vue:213", "导出租约失败:", err);
+          formatAppLog("error", "at pages/rental/rental.vue:210", "导出租约失败:", err);
           uni.hideLoading();
           uni.showToast({
             title: err && err.message ? err.message : "导出失败",
@@ -2719,7 +3204,7 @@ ${info.hint || ""}`;
                 showCancel: false
               });
             }).catch((err) => {
-              formatAppLog("error", "at pages/rental/rental.vue:245", "导入租约失败:", err);
+              formatAppLog("error", "at pages/rental/rental.vue:242", "导入租约失败:", err);
               uni.hideLoading();
               const msg = err && err.message ? err.message : "导入失败";
               if (msg === "已取消") {
@@ -2761,7 +3246,7 @@ ${info.hint || ""}`;
                     icon: "success"
                   });
                 }).catch((err) => {
-                  formatAppLog("error", "at pages/rental/rental.vue:294", "删除失败:", err);
+                  formatAppLog("error", "at pages/rental/rental.vue:291", "删除失败:", err);
                   this.rentalList = this.rentalList.filter((item) => item.id !== id);
                   uni.showToast({
                     title: "删除成功",
@@ -2827,7 +3312,7 @@ ${info.hint || ""}`;
                   icon: "success"
                 });
               }).catch((err) => {
-                formatAppLog("error", "at pages/rental/rental.vue:369", "续租失败:", err);
+                formatAppLog("error", "at pages/rental/rental.vue:366", "续租失败:", err);
                 uni.showToast({
                   title: "续租失败",
                   icon: "error"
@@ -2873,7 +3358,7 @@ ${info.hint || ""}`;
                   icon: "success"
                 });
               }).catch((err) => {
-                formatAppLog("error", "at pages/rental/rental.vue:422", "退租失败:", err);
+                formatAppLog("error", "at pages/rental/rental.vue:419", "退租失败:", err);
                 uni.showToast({
                   title: "退租失败",
                   icon: "error"
@@ -2902,7 +3387,7 @@ ${info.hint || ""}`;
                   icon: "success"
                 });
               }).catch((err) => {
-                formatAppLog("error", "at pages/rental/rental.vue:453", "完成租约失败:", err);
+                formatAppLog("error", "at pages/rental/rental.vue:450", "完成租约失败:", err);
                 uni.showToast({
                   title: "完成租约失败",
                   icon: "error"
@@ -2959,7 +3444,7 @@ ${info.hint || ""}`;
       }
     }
   };
-  function _sfc_render$3(_ctx, _cache, $props, $setup, $data, $options) {
+  function _sfc_render$5(_ctx, _cache, $props, $setup, $data, $options) {
     return vue.openBlock(), vue.createElementBlock("view", {
       class: "container",
       onClick: _cache[8] || (_cache[8] = (...args) => $options.closeSlideAction && $options.closeSlideAction(...args))
@@ -3133,8 +3618,8 @@ ${info.hint || ""}`;
       ])
     ]);
   }
-  const PagesRentalRental = /* @__PURE__ */ _export_sfc(_sfc_main$4, [["render", _sfc_render$3], ["__scopeId", "data-v-c7393d3c"], ["__file", "D:/newLearn/new_vue/projects/rentApp/rentData/pages/rental/rental.vue"]]);
-  const _sfc_main$3 = {
+  const PagesRentalRental = /* @__PURE__ */ _export_sfc(_sfc_main$6, [["render", _sfc_render$5], ["__scopeId", "data-v-c7393d3c"], ["__file", "D:/newLearn/new_vue/projects/rentApp/rentData/pages/rental/rental.vue"]]);
+  const _sfc_main$5 = {
     data() {
       return {
         carList: [],
@@ -3290,7 +3775,7 @@ ${info.hint || ""}`;
       }
     }
   };
-  function _sfc_render$2(_ctx, _cache, $props, $setup, $data, $options) {
+  function _sfc_render$4(_ctx, _cache, $props, $setup, $data, $options) {
     var _a;
     return vue.openBlock(), vue.createElementBlock("view", { class: "container" }, [
       vue.createElementVNode("view", { class: "form" }, [
@@ -3498,8 +3983,8 @@ ${info.hint || ""}`;
       ])
     ]);
   }
-  const PagesRentalAddRental = /* @__PURE__ */ _export_sfc(_sfc_main$3, [["render", _sfc_render$2], ["__scopeId", "data-v-4d28a5ee"], ["__file", "D:/newLearn/new_vue/projects/rentApp/rentData/pages/rental/add-rental.vue"]]);
-  const _sfc_main$2 = {
+  const PagesRentalAddRental = /* @__PURE__ */ _export_sfc(_sfc_main$5, [["render", _sfc_render$4], ["__scopeId", "data-v-4d28a5ee"], ["__file", "D:/newLearn/new_vue/projects/rentApp/rentData/pages/rental/add-rental.vue"]]);
+  const _sfc_main$4 = {
     data() {
       return {
         carList: [],
@@ -3702,7 +4187,7 @@ ${info.hint || ""}`;
       }
     }
   };
-  function _sfc_render$1(_ctx, _cache, $props, $setup, $data, $options) {
+  function _sfc_render$3(_ctx, _cache, $props, $setup, $data, $options) {
     var _a;
     return vue.openBlock(), vue.createElementBlock("view", { class: "container" }, [
       vue.createElementVNode("view", { class: "form" }, [
@@ -3910,14 +4395,14 @@ ${info.hint || ""}`;
       ])
     ]);
   }
-  const PagesRentalEditRental = /* @__PURE__ */ _export_sfc(_sfc_main$2, [["render", _sfc_render$1], ["__scopeId", "data-v-2d0021ad"], ["__file", "D:/newLearn/new_vue/projects/rentApp/rentData/pages/rental/edit-rental.vue"]]);
+  const PagesRentalEditRental = /* @__PURE__ */ _export_sfc(_sfc_main$4, [["render", _sfc_render$3], ["__scopeId", "data-v-2d0021ad"], ["__file", "D:/newLearn/new_vue/projects/rentApp/rentData/pages/rental/edit-rental.vue"]]);
   function currentYearMonth() {
     const d = /* @__PURE__ */ new Date();
     const y = d.getFullYear();
     const m = String(d.getMonth() + 1).padStart(2, "0");
     return `${y}-${m}`;
   }
-  const _sfc_main$1 = {
+  const _sfc_main$3 = {
     data() {
       const ym = currentYearMonth();
       const y = String((/* @__PURE__ */ new Date()).getFullYear());
@@ -3932,7 +4417,9 @@ ${info.hint || ""}`;
         yearlyIncome: 0,
         totalIncome: 0,
         monthlyData: [],
-        carData: []
+        carData: [],
+        // 首次加载是否已自动定位到最近有租约的月份（之后尊重用户手动选择）
+        hasAutoPickedMonth: false
       };
     },
     computed: {
@@ -3940,74 +4427,25 @@ ${info.hint || ""}`;
         return `${this.monthlyStatsYear}-01-01`;
       }
     },
-    onLoad() {
-      this.loadStatistics();
-      this.loadMonthlyData();
-      this.loadCarData();
-    },
     onShow() {
-      this.loadStatistics();
-      this.loadMonthlyData();
-      this.loadCarData();
+      this.refreshAll();
     },
     methods: {
       onDateChange(e) {
         this.selectedDate = e.detail.value;
-        this.loadStatistics();
+        this.refreshAll();
       },
       onCarStatsMonthChange(e) {
         this.carStatsMonth = e.detail.value;
-        this.loadCarData();
+        this.refreshAll();
       },
       onMonthlyStatsYearChange(e) {
         const v = e.detail.value || "";
         this.monthlyStatsYear = v.length >= 4 ? v.substring(0, 4) : String((/* @__PURE__ */ new Date()).getFullYear());
-        this.loadMonthlyData();
+        this.refreshAll();
       },
-      loadStatistics() {
-        const monthlySql = `SELECT SUM(CASE WHEN changedTotalAmount IS NOT NULL THEN changedTotalAmount ELSE initialTotalAmount END) as total FROM rental WHERE substr(startDate, 1, 7) = ?`;
-        query(monthlySql, [this.selectedDate]).then((res) => {
-          this.monthlyIncome = res && res[0] && res[0].total ? parseFloat(res[0].total).toFixed(2) : 0;
-        }).catch((err) => {
-          formatAppLog("error", "at pages/statistics/statistics.vue:168", "加载月度租赁收入失败:", err);
-          this.monthlyIncome = "3600.00";
-        });
-        const year = this.selectedDate.substring(0, 4);
-        const yearlySql = `SELECT SUM(CASE WHEN changedTotalAmount IS NOT NULL THEN changedTotalAmount ELSE initialTotalAmount END) as total FROM rental WHERE substr(startDate, 1, 4) = ?`;
-        query(yearlySql, [year]).then((res) => {
-          this.yearlyIncome = res && res[0] && res[0].total ? parseFloat(res[0].total).toFixed(2) : 0;
-        }).catch((err) => {
-          formatAppLog("error", "at pages/statistics/statistics.vue:179", "加载年度租赁收入失败:", err);
-          this.yearlyIncome = "43200.00";
-        });
-        const totalSql = `SELECT SUM(CASE WHEN changedTotalAmount IS NOT NULL THEN changedTotalAmount ELSE initialTotalAmount END) as total FROM rental`;
-        query(totalSql).then((res) => {
-          this.totalIncome = res && res[0] && res[0].total ? parseFloat(res[0].total).toFixed(2) : 0;
-        }).catch((err) => {
-          formatAppLog("error", "at pages/statistics/statistics.vue:189", "加载总租赁收入失败:", err);
-          this.totalIncome = "43200.00";
-        });
-      },
-      loadMonthlyData() {
-        const yearPrefix = this.monthlyStatsYear;
-        const monthlySql = `SELECT substr(startDate, 1, 7) as month, SUM(CASE WHEN changedTotalAmount IS NOT NULL THEN changedTotalAmount ELSE initialTotalAmount END) as income FROM rental GROUP BY month ORDER BY month`;
-        query(monthlySql).then((res) => {
-          const rows = (res || []).filter((item) => item.month && String(item.month).startsWith(yearPrefix + "-")).map((item) => ({
-            month: item.month,
-            income: parseFloat(item.income).toFixed(2)
-          }));
-          this.monthlyData = rows;
-        }).catch((err) => {
-          formatAppLog("error", "at pages/statistics/statistics.vue:208", "加载按月收入统计失败:", err);
-          const y = yearPrefix;
-          this.monthlyData = [
-            { month: `${y}-01`, income: "3000.00" },
-            { month: `${y}-02`, income: "2500.00" },
-            { month: `${y}-03`, income: "4000.00" }
-          ];
-        });
-      },
-      rentalRowAmount(row) {
+      /** 租约实际金额：优先变化后的总金额，其次初始金额，兼容历史 totalAmount */
+      rentalAmount(row) {
         let v = row.changedTotalAmount;
         if (v == null)
           v = row.initialTotalAmount;
@@ -4016,44 +4454,87 @@ ${info.hint || ""}`;
         const n = parseFloat(v);
         return Number.isFinite(n) ? n : 0;
       },
-      loadCarData() {
-        const month = this.carStatsMonth;
-        const year = month.length >= 4 ? month.substring(0, 4) : "";
-        const sql = `SELECT * FROM rental ORDER BY id DESC`;
-        query(sql).then((res) => {
-          const list = res || [];
-          const names = /* @__PURE__ */ new Set();
-          const monthMap = {};
-          const yearMap = {};
-          list.forEach((row) => {
-            const carName = row.carName || "未命名";
-            names.add(carName);
-            const amt = this.rentalRowAmount(row);
-            const sd = row.startDate || "";
-            if (sd.substring(0, 7) === month) {
-              monthMap[carName] = (monthMap[carName] || 0) + amt;
-            }
-            if (year && sd.substring(0, 4) === year) {
-              yearMap[carName] = (yearMap[carName] || 0) + amt;
-            }
-          });
-          this.carData = Array.from(names).map((carName) => ({
-            carName,
-            monthIncome: (monthMap[carName] || 0).toFixed(2),
-            yearIncome: (yearMap[carName] || 0).toFixed(2)
-          })).sort((a, b) => parseFloat(b.monthIncome) - parseFloat(a.monthIncome));
+      /** 只读一次 rental 全表，在内存中一次性汇总月/年/总/车名维度。 */
+      refreshAll() {
+        Promise.all([
+          query("SELECT * FROM rental"),
+          query("SELECT * FROM car")
+        ]).then(([rentalRows, carRows]) => {
+          this.computeAll(rentalRows || [], carRows || []);
         }).catch((err) => {
-          formatAppLog("error", "at pages/statistics/statistics.vue:255", "加载按车名统计失败:", err);
-          this.carData = [
-            { carName: "大众朗逸", monthIncome: "1200.00", yearIncome: "18000.00" },
-            { carName: "丰田凯美瑞", monthIncome: "800.00", yearIncome: "15000.00" },
-            { carName: "本田雅阁", monthIncome: "0.00", yearIncome: "10200.00" }
-          ];
+          formatAppLog("warn", "at pages/statistics/statistics.vue:170", "加载统计数据失败:", err);
+          this.computeAll([], []);
         });
+      },
+      computeAll(list, carRows) {
+        const carNameById = {};
+        (carRows || []).forEach((car) => {
+          carNameById[car.id] = car.name;
+        });
+        if (!this.hasAutoPickedMonth && list.length > 0) {
+          let latest = "";
+          list.forEach((row) => {
+            const sd = row.startDate || "";
+            if (sd > latest)
+              latest = sd;
+          });
+          if (latest.length >= 7) {
+            this.selectedDate = latest.substring(0, 7);
+            this.carStatsMonth = this.selectedDate;
+            this.monthlyStatsYear = latest.substring(0, 4);
+          }
+        }
+        this.hasAutoPickedMonth = true;
+        const monthKey = this.selectedDate || "";
+        const yearKey = monthKey.substring(0, 4);
+        const yearOfMonthlyStats = String(this.monthlyStatsYear || "");
+        const carMonthKey = this.carStatsMonth || "";
+        const carYearKey = carMonthKey.substring(0, 4);
+        let monthly = 0;
+        let yearly = 0;
+        let total = 0;
+        const monthBuckets = {};
+        const carMonthMap = {};
+        const carYearMap = {};
+        const carKeyName = {};
+        list.forEach((row) => {
+          const amt = this.rentalAmount(row);
+          const startDate = row.startDate || "";
+          const rowMonth = startDate.substring(0, 7);
+          const rowYear = startDate.substring(0, 4);
+          total += amt;
+          if (rowMonth === monthKey) {
+            monthly += amt;
+          }
+          if (yearKey && rowYear === yearKey) {
+            yearly += amt;
+          }
+          if (yearOfMonthlyStats && rowYear === yearOfMonthlyStats) {
+            monthBuckets[rowMonth] = (monthBuckets[rowMonth] || 0) + amt;
+          }
+          const carKey = row.carId != null ? "id:" + row.carId : "name:" + (row.carName || "未命名");
+          carKeyName[carKey] = carNameById[row.carId] || row.carName || "未命名";
+          if (rowMonth === carMonthKey) {
+            carMonthMap[carKey] = (carMonthMap[carKey] || 0) + amt;
+          }
+          if (carYearKey && rowYear === carYearKey) {
+            carYearMap[carKey] = (carYearMap[carKey] || 0) + amt;
+          }
+        });
+        this.monthlyIncome = monthly.toFixed(2);
+        this.yearlyIncome = yearly.toFixed(2);
+        this.totalIncome = total.toFixed(2);
+        this.monthlyData = Object.keys(monthBuckets).sort().map((m) => ({ month: m, income: monthBuckets[m].toFixed(2) }));
+        this.carData = Object.keys(carKeyName).map((carKey) => ({
+          key: carKey,
+          carName: carKeyName[carKey],
+          monthIncome: (carMonthMap[carKey] || 0).toFixed(2),
+          yearIncome: (carYearMap[carKey] || 0).toFixed(2)
+        })).sort((a, b) => parseFloat(b.monthIncome) - parseFloat(a.monthIncome));
       }
     }
   };
-  function _sfc_render(_ctx, _cache, $props, $setup, $data, $options) {
+  function _sfc_render$2(_ctx, _cache, $props, $setup, $data, $options) {
     return vue.openBlock(), vue.createElementBlock("view", { class: "container" }, [
       vue.createElementVNode("view", { class: "header" }, [
         vue.createElementVNode("text", { class: "title" }, "统计报表"),
@@ -4205,7 +4686,7 @@ ${info.hint || ""}`;
             null,
             vue.renderList($data.carData, (item) => {
               return vue.openBlock(), vue.createElementBlock("view", {
-                key: item.carName,
+                key: item.key,
                 class: "table-row table-header-3"
               }, [
                 vue.createElementVNode(
@@ -4242,7 +4723,146 @@ ${info.hint || ""}`;
       ])
     ]);
   }
-  const PagesStatisticsStatistics = /* @__PURE__ */ _export_sfc(_sfc_main$1, [["render", _sfc_render], ["__scopeId", "data-v-fc23ec97"], ["__file", "D:/newLearn/new_vue/projects/rentApp/rentData/pages/statistics/statistics.vue"]]);
+  const PagesStatisticsStatistics = /* @__PURE__ */ _export_sfc(_sfc_main$3, [["render", _sfc_render$2], ["__scopeId", "data-v-fc23ec97"], ["__file", "D:/newLearn/new_vue/projects/rentApp/rentData/pages/statistics/statistics.vue"]]);
+  const _sfc_main$2 = {
+    data() {
+      return {
+        summary: "读取中…"
+      };
+    },
+    onShow() {
+      this.loadSummary();
+    },
+    methods: {
+      loadSummary() {
+        Promise.all([
+          query("SELECT COUNT(*) as c FROM car"),
+          query("SELECT COUNT(*) as c FROM rental")
+        ]).then(([carRes, rentalRes]) => {
+          const carCount = carRes && carRes[0] ? carRes[0].c : 0;
+          const rentalCount = rentalRes && rentalRes[0] ? rentalRes[0].c : 0;
+          this.summary = "车辆 " + carCount + " 辆，租约 " + rentalCount + " 条";
+        }).catch(() => {
+          this.summary = "读取失败";
+        });
+      },
+      doExport() {
+        uni.showLoading({ title: "导出中", mask: true });
+        exportDbToDownload().then((fileName) => {
+          uni.hideLoading();
+          uni.showModal({
+            title: "导出成功",
+            content: "已保存到手机 Download 目录：\n" + fileName,
+            showCancel: false
+          });
+        }).catch((err) => {
+          uni.hideLoading();
+          uni.showModal({
+            title: "导出失败",
+            content: String(err && err.message || err),
+            showCancel: false
+          });
+        });
+      },
+      goImport() {
+        uni.navigateTo({ url: "./import-db" });
+      }
+    }
+  };
+  function _sfc_render$1(_ctx, _cache, $props, $setup, $data, $options) {
+    return vue.openBlock(), vue.createElementBlock("view", { class: "container" }, [
+      vue.createElementVNode("view", { class: "card" }, [
+        vue.createElementVNode("text", { class: "title" }, "导出数据库"),
+        vue.createElementVNode("text", { class: "desc" }, "把当前数据库另存到手机 Download 目录，文件名带日期。换手机或重装 App 时用它恢复。"),
+        vue.createElementVNode("button", {
+          class: "action-btn primary",
+          onClick: _cache[0] || (_cache[0] = (...args) => $options.doExport && $options.doExport(...args))
+        }, "导出到 Download")
+      ]),
+      vue.createElementVNode("view", { class: "card" }, [
+        vue.createElementVNode("text", { class: "title" }, "导入数据库"),
+        vue.createElementVNode("text", { class: "desc" }, "从系统文件选择器挑一个 .db 文件，App 会用其替换当前数据库。导入前建议先导出一份。"),
+        vue.createElementVNode("button", {
+          class: "action-btn",
+          onClick: _cache[1] || (_cache[1] = (...args) => $options.goImport && $options.goImport(...args))
+        }, "选择 .db 文件")
+      ]),
+      vue.createElementVNode("view", { class: "card" }, [
+        vue.createElementVNode("text", { class: "title" }, "当前数据"),
+        vue.createElementVNode(
+          "text",
+          { class: "desc" },
+          vue.toDisplayString($data.summary),
+          1
+          /* TEXT */
+        )
+      ])
+    ]);
+  }
+  const PagesDataData = /* @__PURE__ */ _export_sfc(_sfc_main$2, [["render", _sfc_render$1], ["__scopeId", "data-v-98b81aa6"], ["__file", "D:/newLearn/new_vue/projects/rentApp/rentData/pages/data/data.vue"]]);
+  const _sfc_main$1 = {
+    data() {
+      return {
+        pageUrl: "/static/db-import.html",
+        chunks: {},
+        total: 0,
+        importing: false
+      };
+    },
+    methods: {
+      /** web-view 里选完文件后，H5 分片 postMessage 过来 */
+      onMessage(e) {
+        if (this.importing) {
+          return;
+        }
+        const list = e.detail && e.detail.data || [];
+        list.forEach((msg) => {
+          if (!msg || msg.type !== "db-chunk") {
+            return;
+          }
+          this.chunks[msg.seq] = msg.data;
+          this.total = msg.total || 0;
+        });
+        if (this.total > 0 && Object.keys(this.chunks).length >= this.total) {
+          this.writeChunks();
+        }
+      },
+      writeChunks() {
+        this.importing = true;
+        const keys = Object.keys(this.chunks).sort((a, b) => Number(a) - Number(b));
+        const base64 = keys.map((k) => this.chunks[k]).join("");
+        this.chunks = {};
+        this.total = 0;
+        uni.showLoading({ title: "导入中", mask: true });
+        importDbFromBase64(base64).then(() => {
+          uni.hideLoading();
+          uni.showModal({
+            title: "导入成功",
+            content: "数据库已替换，请核对车辆与租约数据。",
+            showCancel: false,
+            success: () => {
+              uni.reLaunch({ url: "/pages/index/index" });
+            }
+          });
+        }).catch((err) => {
+          uni.hideLoading();
+          this.importing = false;
+          uni.showModal({
+            title: "导入失败",
+            content: String(err && err.message || err),
+            showCancel: false
+          });
+        });
+      }
+    }
+  };
+  function _sfc_render(_ctx, _cache, $props, $setup, $data, $options) {
+    return vue.openBlock(), vue.createElementBlock("web-view", {
+      src: $data.pageUrl,
+      onMessage: _cache[0] || (_cache[0] = (...args) => $options.onMessage && $options.onMessage(...args))
+    }, null, 40, ["src"]);
+  }
+  const PagesDataImportDb = /* @__PURE__ */ _export_sfc(_sfc_main$1, [["render", _sfc_render], ["__file", "D:/newLearn/new_vue/projects/rentApp/rentData/pages/data/import-db.vue"]]);
   __definePage("pages/index/index", PagesIndexIndex);
   __definePage("pages/index/add-car", PagesIndexAddCar);
   __definePage("pages/index/edit-car", PagesIndexEditCar);
@@ -4256,6 +4876,8 @@ ${info.hint || ""}`;
   __definePage("pages/rental/add-rental", PagesRentalAddRental);
   __definePage("pages/rental/edit-rental", PagesRentalEditRental);
   __definePage("pages/statistics/statistics", PagesStatisticsStatistics);
+  __definePage("pages/data/data", PagesDataData);
+  __definePage("pages/data/import-db", PagesDataImportDb);
   const _sfc_main = {
     onLaunch: function() {
       formatAppLog("log", "at App.vue:5", "App Launch");
@@ -4270,10 +4892,20 @@ ${info.hint || ""}`;
     methods: {
       initDatabase() {
         initDb().then(() => {
-          formatAppLog("log", "at App.vue:21", "数据库初始化成功");
+          formatAppLog("log", "at App.vue:21", "数据库初始化成功，存储后端:", hasPlusSqlite() ? "SQLite" : "IndexedDB");
         }).catch((err) => {
-          formatAppLog("warn", "at App.vue:23", "数据库初始化失败，使用模拟数据:", err);
-          formatAppLog("log", "at App.vue:25", "使用模拟数据");
+          formatAppLog("warn", "at App.vue:23", "数据库初始化失败:", err);
+          const msg = err && (err.message || err.msg) ? String(err.message || err.msg) : String(err);
+          uni.showModal({
+            title: "数据库初始化失败",
+            content: msg + "\n\n可在「数据管理」页重新导入数据库，或把 car_management.db 复制到手机「Download」目录后点【重试】。",
+            confirmText: "重试",
+            success: (res) => {
+              if (res.confirm) {
+                this.initDatabase();
+              }
+            }
+          });
         });
       }
     }

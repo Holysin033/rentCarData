@@ -1,0 +1,138 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no" />
+<title>选择数据库文件</title>
+<style>
+	body {
+		margin: 0;
+		padding: 32px 20px;
+		font-family: -apple-system, 'Helvetica Neue', Arial, sans-serif;
+		background: #f5f5f5;
+		color: #333;
+	}
+	.tip {
+		font-size: 15px;
+		line-height: 1.7;
+		color: #666;
+		margin: 0 0 24px;
+	}
+	.btn {
+		display: block;
+		width: 100%;
+		padding: 15px 0;
+		border: none;
+		border-radius: 10px;
+		background: #007AFF;
+		color: #fff;
+		font-size: 17px;
+	}
+	.btn:disabled {
+		background: #9bbfe0;
+	}
+	#status {
+		margin-top: 20px;
+		font-size: 14px;
+		line-height: 1.6;
+		color: #007AFF;
+		word-break: break-all;
+	}
+	#status.error {
+		color: #d93025;
+	}
+</style>
+</head>
+<body>
+	<p class="tip">请选择 <b>car_management.db</b>，或之前从本 App 导出的 <b>car_management_*.db</b> 文件。导入会替换当前数据库。</p>
+	<button id="pick" class="btn" disabled>选择文件</button>
+	<p id="status"></p>
+
+	<script src="uni.webview.1.5.2.js"></script>
+	<script>
+		(function () {
+			// 每段 20 万字符：避开一次 evalJS 传超大字符串导致卡死
+			var CHUNK = 200000;
+			var MAX_SIZE = 8 * 1024 * 1024;
+			var btn = document.getElementById('pick');
+			var statusEl = document.getElementById('status');
+			var input = document.createElement('input');
+			input.type = 'file';
+			input.accept = '*/*';
+			input.style.display = 'none';
+			document.body.appendChild(input);
+
+			function setStatus(text, isError) {
+				statusEl.textContent = text;
+				statusEl.className = isError ? 'error' : '';
+			}
+
+			// 桥接就绪后才能 postMessage
+			function bridgeReady() {
+				btn.disabled = false;
+			}
+			document.addEventListener('UniAppJSBridgeReady', bridgeReady);
+			window.addEventListener('load', function () {
+				setTimeout(bridgeReady, 200);
+			});
+
+			btn.addEventListener('click', function () {
+				input.click();
+			});
+
+			input.addEventListener('change', function () {
+				var file = input.files && input.files[0];
+				if (!file) {
+					return;
+				}
+				if (file.size > MAX_SIZE) {
+					setStatus('文件过大（超过 8MB），暂不支持', true);
+					return;
+				}
+				btn.disabled = true;
+				setStatus('读取中…');
+				var reader = new FileReader();
+				reader.onload = function () {
+					var base64 = String(reader.result || '').split(',')[1] || '';
+					if (!base64) {
+						setStatus('读取失败：文件内容为空', true);
+						btn.disabled = false;
+						return;
+					}
+					var total = Math.ceil(base64.length / CHUNK) || 1;
+					var seq = 0;
+					var send = function () {
+						if (seq >= total) {
+							setStatus('已发送 ' + total + ' 段，等待 App 写入…');
+							return;
+						}
+						try {
+							uni.postMessage({
+								data: {
+									type: 'db-chunk',
+									seq: seq,
+									total: total,
+									data: base64.substr(seq * CHUNK, CHUNK)
+								}
+							});
+						} catch (e) {
+							setStatus('发送失败：' + e, true);
+							btn.disabled = false;
+							return;
+						}
+						seq += 1;
+						setStatus('传输中 ' + Math.round(seq / total * 100) + '%');
+						setTimeout(send, 0);
+					};
+					send();
+				};
+				reader.onerror = function () {
+					setStatus('读取文件失败', true);
+					btn.disabled = false;
+				};
+				reader.readAsDataURL(file);
+			});
+		})();
+	</script>
+</body>
+</html>

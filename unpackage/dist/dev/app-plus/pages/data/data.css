@@ -1,0 +1,26 @@
+
+.container[data-v-98b81aa6] {
+	padding: 0.625rem;
+}
+.card[data-v-98b81aa6] {
+	margin-bottom: 0.625rem;
+}
+.desc[data-v-98b81aa6] {
+	display: block;
+	margin: 0.375rem 0 0.75rem;
+	font-size: 0.75rem;
+	line-height: 1.6;
+	color: #666;
+}
+.action-btn[data-v-98b81aa6] {
+	width: 100%;
+	padding: 0.46875rem;
+	border-radius: 0.25rem;
+	background-color: #f0f0f0;
+	color: #333;
+	font-size: 0.75rem;
+}
+.action-btn.primary[data-v-98b81aa6] {
+	background-color: #007AFF;
+	color: #ffffff;
+}

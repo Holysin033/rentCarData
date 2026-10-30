@@ -7,8 +7,17 @@ let indexedDb = null;
 // 初始化 Promise 缓存：页面可能早于 App.vue 的 initDb 完成就发起查询
 let initPromise = null;
 
+/** 手机公共 Download 目录 / App 私有下载目录中预先放好的库文件（按顺序尝试） */
+const DB_DOWNLOAD_CANDIDATES = [
+	'/storage/emulated/0/Download/car_management.db',
+	'file:///storage/emulated/0/Download/car_management.db',
+	'_downloads/car_management.db'
+];
+// 记录已导入文件的指纹（路径+大小+修改时间），避免每次启动都覆盖 App 内新增的数据
+const DB_IMPORT_MARK_KEY = 'db_imported_mark';
+
 /** 5+ 官方为 openDatabase / closeDatabase，无 open / close */
-function hasPlusSqlite() {
+export function hasPlusSqlite() {
 	return (
 		typeof plus !== 'undefined' &&
 		plus.sqlite &&
@@ -42,14 +51,29 @@ function bindPlusSqlParams(sql, params) {
 }
 
 // 初始化数据库
-export function initDb() {
+// skipImport=true 时不跑「包内 static / Download」导入，用于刚手工导入库之后避免被覆盖
+export function initDb(skipImport = false) {
 	if (initPromise) {
 		return initPromise;
 	}
 	initPromise = new Promise((resolve, reject) => {
 		const runInit = () => {
 			if (hasPlusSqlite()) {
-				initPlusSqlite().then(resolve).catch(reject);
+				if (skipImport) {
+					initPlusSqlite().then(resolve).catch(reject);
+					return;
+				}
+				// 首次启动时从手机 Download 目录导入外部库（之后由 App 自己读写 _doc）
+				// 外部写入的文件属主不对，SQLite 会报 -1404，所以必须由 App 自己复制一份
+				importDbFrom(DB_DOWNLOAD_CANDIDATES)
+					.then((res) => {
+						if (res && res.installed) {
+							console.log('已导入数据库:', res.source);
+						}
+					})
+					.then(() => initPlusSqlite())
+					.then(resolve)
+					.catch(reject);
 			} else {
 				initIndexedDB().then(resolve).catch(reject);
 			}
@@ -152,7 +176,8 @@ function initIndexedDB() {
 }
 
 // 初始化plus.sqlite（App环境）
-function initPlusSqlite() {
+// stage: 0 首次打开；1 已清理 journal/权限后重试；2 已复制重建文件后重试
+function initPlusSqlite(stage = 0) {
 	return new Promise((resolve, reject) => {
 		plus.sqlite.openDatabase({
 			name: dbName,
@@ -162,10 +187,361 @@ function initPlusSqlite() {
 				createTables().then(resolve).catch(reject);
 			},
 			fail: function (e) {
-				reject(e);
+				if (!isDbCantOpenError(e) || stage >= 2) {
+					reject(e);
+					return;
+				}
+				if (stage === 0) {
+					// 原因 1：残留 -journal 事务日志，或文件权限被外部写入覆盖
+					prepareDbForRetry()
+						.then(() => initPlusSqlite(1))
+						.then(resolve)
+						.catch(reject);
+				} else {
+					// 原因 2：文件属主不是 App（用文件管理器/MTP 覆盖），在 App 进程内复制重建
+					rebuildDbFile()
+						.then(() => initPlusSqlite(2))
+						.then(resolve)
+						.catch((err) => {
+							reject({
+								code: -1404,
+								message: '数据库文件不可读，自动修复失败：' + toErrText(err) +
+									'。请彻底关闭 App（从后台移除）后删除 car_management.db-journal，再替换 car_management.db 并重新启动。'
+							});
+						});
+				}
 			}
 		});
 	});
+}
+
+/** -1404 / CantOpen：数据库文件打不开，多为权限异常或残留 journal */
+function isDbCantOpenError(e) {
+	if (!e) {
+		return false;
+	}
+	const text = typeof e === 'string' ? e : (e.message || e.msg || e.error || '');
+	return e.code === -1404 || /CantOpen|not readable|Unable to open database/i.test(String(text));
+}
+
+function toErrText(err) {
+	if (!err) {
+		return '未知错误';
+	}
+	if (typeof err === 'string') {
+		return err;
+	}
+	return String(err.message || err.msg || err.error || JSON.stringify(err));
+}
+
+/** 重试前清理：删掉 -journal 残留，并尽量恢复 db 文件的读写权限 */
+function prepareDbForRetry() {
+	return new Promise((resolve) => {
+		// #ifdef APP-PLUS
+		tryChmodDbFile();
+		// #endif
+		if (typeof plus === 'undefined' || !plus.io) {
+			resolve();
+			return;
+		}
+		plus.io.resolveLocalFileSystemURL('_doc/' + dbName + '.db-journal', function (entry) {
+			entry.remove(function () { resolve(); }, function () { resolve(); });
+		}, function () {
+			resolve();
+		});
+	});
+}
+
+// #ifdef APP-PLUS
+/** 文件被 MTP/文件管理器覆盖后属主可能不是 App，尝试恢复读写权限（非属主时静默失败） */
+function tryChmodDbFile() {
+	try {
+		const File = plus.android.importClass('java.io.File');
+		const file = new File(plus.io.convertLocalFileSystemURL('_doc/' + dbName + '.db'));
+		if (file.exists()) {
+			file.setReadable(true, false);
+			file.setWritable(true, false);
+		}
+	} catch (e) {}
+}
+// #endif
+
+/**
+ * 用 sourceUrl 指向的文件替换 _doc 里的库：先复制成临时文件，成功后再替换原名
+ * （分两步是为了复制失败时不至于把现有库删掉）
+ */
+function replaceDocDbFile(sourceUrl) {
+	return new Promise((resolve, reject) => {
+		if (typeof plus === 'undefined' || !plus.io) {
+			reject('plus.io 不可用');
+			return;
+		}
+		const targetName = dbName + '.db';
+		const tempName = dbName + '_rebuild.db';
+		const journalName = targetName + '-journal';
+
+		// 删除文件；文件不存在或删不掉都继续（不阻塞流程）
+		const removeQuiet = (name, next) => {
+			plus.io.resolveLocalFileSystemURL('_doc/' + name, function (entry) {
+				entry.remove(function () { next(); }, function () { next(); });
+			}, function () {
+				next();
+			});
+		};
+
+		plus.io.resolveLocalFileSystemURL('_doc/', function (dirEntry) {
+			plus.io.resolveLocalFileSystemURL(sourceUrl, function (srcEntry) {
+				removeQuiet(tempName, function () {
+					srcEntry.copyTo(dirEntry, tempName, function () {
+						// 复制成功后才动原库：删旧库 + 残留 journal，再把临时文件改回原名
+						removeQuiet(targetName, function () {
+							removeQuiet(journalName, function () {
+								plus.io.resolveLocalFileSystemURL('_doc/' + tempName, function (tempEntry) {
+									tempEntry.moveTo(dirEntry, targetName, function () {
+										resolve();
+									}, function (err) {
+										reject('替换数据库文件失败：' + toErrText(err));
+									});
+								}, function (err) {
+									reject('临时数据库文件解析失败：' + toErrText(err));
+								});
+							});
+						});
+					}, function (err) {
+						reject('数据库文件不可读：' + toErrText(err));
+					});
+				});
+			}, function (err) {
+				reject('未找到数据库文件：' + toErrText(err));
+			});
+		}, function (err) {
+			reject('无法访问 _doc 目录：' + toErrText(err));
+		});
+	});
+}
+
+/** 在 App 进程内把 db 复制成新文件（新文件属主为 App，权限正常），再替换回原名 */
+function rebuildDbFile() {
+	return replaceDocDbFile('_doc/' + dbName + '.db');
+}
+
+/**
+ * 按候选路径依次尝试导入：在 App 进程内复制进 _doc（新文件属主为 App，权限正常）
+ * 同一文件只导入一次（按路径+大小+修改时间做指纹），避免每次启动覆盖 App 内新增数据
+ */
+function importDbFrom(candidates, force = false) {
+	return new Promise((resolve) => {
+		if (typeof plus === 'undefined' || !plus.io) {
+			resolve({ installed: false });
+			return;
+		}
+
+		const mark = readImportMark();
+
+		const tryNext = (index) => {
+			if (index >= candidates.length) {
+				resolve({ installed: false });
+				return;
+			}
+			const url = candidates[index];
+			plus.io.resolveLocalFileSystemURL(url, function (fileEntry) {
+				// 导入成功后才记指纹；失败不记，下次启动还会再试
+				const doImport = (fingerprint) => {
+					replaceDocDbFile(url)
+						.then(() => {
+							if (fingerprint) {
+								writeImportMark(fingerprint);
+							}
+							resolve({ installed: true, source: url });
+						})
+						.catch(() => {
+							tryNext(index + 1);
+						});
+				};
+				fileEntry.getMetadata(function (meta) {
+					const fingerprint = url + '|' + meta.size + '|' + meta.modificationTime;
+					if (!force && mark === fingerprint) {
+						resolve({ installed: false, skipped: true });
+						return;
+					}
+					doImport(fingerprint);
+				}, function () {
+					// 拿不到元数据无法去重，那就直接导入
+					doImport('');
+				});
+			}, function () {
+				tryNext(index + 1);
+			});
+		};
+
+		tryNext(0);
+	});
+}
+
+/**
+ * 导入用户从「App 内文件选择器」选中的库（base64）
+ * 由 App 自己写盘，属主/权限正常，不依赖任何外部存储权限
+ */
+export function importDbFromBase64(base64) {
+	if (!base64) {
+		return Promise.reject('文件内容为空');
+	}
+	const tempName = dbName + '_import.db';
+	return closeDb()
+		.catch(() => {})
+		.then(() => {
+			db = null;
+			initPromise = null;
+			return writeDocFile(tempName, base64);
+		})
+		.then(() => replaceDocDbFile('_doc/' + tempName))
+		.then(() => initDb(true));
+}
+
+/** 把当前库导出到手机 Download 目录，返回文件名 */
+export function exportDbToDownload() {
+	const fileName = 'car_management_' + formatStamp() + '.db';
+	return closeDb()
+		.catch(() => {})
+		.then(() => {
+			db = null;
+			initPromise = null;
+			return readDocDbBase64();
+		})
+		.then((dataUrl) => {
+			const base64 = String(dataUrl).replace(/^data:.*?,/, '');
+			return saveToDownloads(fileName, base64);
+		})
+		.then(() => initDb(true))
+		.then(() => fileName)
+		.catch((err) => {
+			// 导出失败也要把库重新打开，否则后续页面全是「数据库未初始化」
+			return initDb(true).catch(() => {}).then(() => {
+				throw err;
+			});
+		});
+}
+
+/** 用 FileWriter.writeAsBinary 把 base64 写成 _doc 下的文件 */
+function writeDocFile(name, base64) {
+	return new Promise((resolve, reject) => {
+		if (typeof plus === 'undefined' || !plus.io) {
+			reject('plus.io 不可用');
+			return;
+		}
+		plus.io.resolveLocalFileSystemURL('_doc/', function (dirEntry) {
+			const createAndWrite = function () {
+				dirEntry.getFile(name, { create: true }, function (fileEntry) {
+					fileEntry.createWriter(function (writer) {
+						writer.onwrite = function () {
+							resolve();
+						};
+						writer.onerror = function (e) {
+							reject('写入文件失败：' + toErrText(e));
+						};
+						writer.writeAsBinary(base64);
+					}, function (e) {
+						reject('创建写入器失败：' + toErrText(e));
+					});
+				}, function (e) {
+					reject('创建文件失败：' + toErrText(e));
+				});
+			};
+			plus.io.resolveLocalFileSystemURL('_doc/' + name, function (entry) {
+				entry.remove(createAndWrite, createAndWrite);
+			}, createAndWrite);
+		}, function (e) {
+			reject('无法访问 _doc 目录：' + toErrText(e));
+		});
+	});
+}
+
+/** 读出 _doc 里的库（dataURL 形式的 base64） */
+function readDocDbBase64() {
+	return new Promise((resolve, reject) => {
+		plus.io.resolveLocalFileSystemURL('_doc/' + dbName + '.db', function (entry) {
+			entry.file(function (file) {
+				const reader = new plus.io.FileReader();
+				reader.onloadend = function (e) {
+					resolve(String((e.target && e.target.result) || ''));
+				};
+				reader.onerror = function () {
+					reject('读取数据库文件失败');
+				};
+				reader.readAsDataURL(file);
+			}, function () {
+				reject('读取数据库文件失败');
+			});
+		}, function () {
+			reject('未找到数据库文件');
+		});
+	});
+}
+
+/** 通过 MediaStore 写入公共 Download 目录（Android 10+ 不需要存储权限） */
+function saveToDownloads(fileName, base64) {
+	return new Promise((resolve, reject) => {
+		try {
+			// plus.android 拿到的 Java 对象必须用 plus.android.invoke 调方法，
+			// 直接 obj.method(...) 会报 "xxx is not a function"
+			const version = parseInt(plus.os.version, 10) || 0;
+			if (version < 10) {
+				reject('系统版本低于 Android 10，暂不支持导出到 Download 目录');
+				return;
+			}
+
+			const Uri = plus.android.importClass('android.net.Uri');
+			const Base64 = plus.android.importClass('android.util.Base64');
+
+			const values = plus.android.newObject('android.content.ContentValues');
+			plus.android.invoke(values, 'put', '_display_name', fileName);
+			plus.android.invoke(values, 'put', 'mime_type', 'application/octet-stream');
+
+			const main = plus.android.runtimeMainActivity();
+			const resolver = plus.android.invoke(main, 'getContentResolver');
+			// MediaStore.Downloads.EXTERNAL_CONTENT_URI
+			const collection = Uri.parse('content://media/external/downloads');
+			const uri = plus.android.invoke(resolver, 'insert', collection, values);
+			if (!uri) {
+				reject('无法在 Download 目录创建文件');
+				return;
+			}
+
+			const out = plus.android.invoke(resolver, 'openOutputStream', uri);
+			if (!out) {
+				reject('无法写入 Download 目录');
+				return;
+			}
+			// Base64.DEFAULT = 0
+			plus.android.invoke(out, 'write', Base64.decode(base64, 0));
+			plus.android.invoke(out, 'flush');
+			plus.android.invoke(out, 'close');
+			resolve();
+		} catch (e) {
+			reject('导出失败：' + toErrText(e));
+		}
+	});
+}
+
+function formatStamp() {
+	const d = new Date();
+	const p = (n) => (n < 10 ? '0' + n : String(n));
+	return String(d.getFullYear()) + p(d.getMonth() + 1) + p(d.getDate()) +
+		'_' + p(d.getHours()) + p(d.getMinutes());
+}
+
+function readImportMark() {
+	try {
+		return uni.getStorageSync(DB_IMPORT_MARK_KEY) || '';
+	} catch (e) {
+		return '';
+	}
+}
+
+function writeImportMark(fingerprint) {
+	try {
+		uni.setStorageSync(DB_IMPORT_MARK_KEY, fingerprint);
+	} catch (e) {}
 }
 
 // 创建表（App环境）

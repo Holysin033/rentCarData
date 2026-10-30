@@ -288,6 +288,89 @@ IndexedDB 无 SQL 引擎，旧实现所有 `WHERE` 都要 `store.getAll()` 全�
 
 ---
 
+## 2026-10-30 — 替换 db 文件后报 `-1404 SQLiteCantOpenDatabaseException（is not readable）`
+
+**现象**  
+用户在手机上替换 `apps/<appid>/doc/car_management.db` 后启动 App：
+
+```
+{ "code": -1404, "message": "android.database.sqlite.SQLiteCantOpenDatabaseException: Cannot open database
+'/storage/emulated/0/Android/data/io.dcloud.HBuilder/apps/HBuilder/doc/car_management.db'
+with flags 0x10000000: File ... is not readable" }
+```
+
+注意路径里是 `io.dcloud.HBuilder` → HBuilderX **标准基座**，其 `_doc` 就是 `apps/HBuilder/doc`，路径本身没错。
+
+**原因**  
+1. 通过文件管理器 / MTP / 电脑复制进 `Android/data/<包名>/doc` 的文件，属主通常不是 App 自身（多为 `media_rw`/`shell`），SELinux 上下文也不对，SQLite 以 App 身份打开即 `not readable`。  
+2. 旧库还带着 `car_management.db-journal`（未提交的事务日志），SQLite 打开时要回滚，同样会打开失败。  
+3. 替换时 App 仍在运行、库已打开，覆盖文件会让原句柄失效。
+
+**修复（`utils/db.js`）**  
+`initPlusSqlite(stage)` 增加三级自愈，只在 `-1404` / `CantOpen` / `not readable` 时触发：
+
+- `stage 0` 失败 → `prepareDbForRetry()`：`java.io.File.setReadable/setWritable` 尝试恢复权限 + 删除 `car_management.db-journal`，然后 `stage 1` 重试。
+- `stage 1` 仍失败 → `rebuildDbFile()`：用 `plus.io` 把 db `copyTo` 成 `car_management_rebuild.db`（新文件由 App 创建，属主/权限正常），删除原文件，再 `moveTo` 回 `car_management.db`，然后 `stage 2` 重试。
+- `stage 2` 仍失败 → 抛出中文错误（说明需要先强杀 App、删 journal、再替换）。`App.vue` 在 App 端用 `showModal` 弹出该原因，不再只留一句控制台警告。
+
+**为什么 Download 里的文件读不到（Android 11+ 分区存储）**  
+真机验证：手机 `Download` 目录里确实有 `car_management.db`（76KB / 25 辆车），但自检显示「Download: 没有 db 文件」。原因是 App 能 `resolveLocalFileSystemURL` 到该目录，但 `readEntries` 列目录、读取 `.db`（非媒体文件）被 Scoped Storage 拦截；HBuilderX 标准基座 `io.dcloud.HBuilder` 没有 `MANAGE_EXTERNAL_STORAGE`，绕不过去。
+
+**方案一（已废弃）：放进项目 `static/`**  
+同日已移除：`static/car_management.db` 不再随包发布，`DB_BUNDLED_CANDIDATES` 与包内导入通道一并删除（避免把公司数据打进安装包）。历史做法：把 db 放 `static/`，随 wgt 部署到 `_www/static/`，启动时复制进 `_doc` 并打开；数据落到 `_doc` 后删除该文件。
+
+**方案二：Download 目录（受权限限制）**  
+放到 `/storage/emulated/0/Download/car_management.db` 后重新启动（或删掉库重开）。若仍显示「没有 db 文件」，即为上述分区存储限制，需改用「数据管理 → 导入数据库」（系统文件选择器，不受分区存储限制，见下节）。
+
+导入候选（按顺序）：`/storage/emulated/0/Download/car_management.db` → `file:///...` → `_downloads/car_management.db`（包内 `static` 候选已删除）。  
+去重：成功后记录「路径+大小+修改时间」指纹（`uni.setStorageSync('db_imported_mark')`），同一文件不会重复导入；文件更新（大小/时间变化）后会自动再导入一次。
+
+失败时「数据库初始化失败」弹窗会带出具体原因，并提示把文件放到 Download 目录后点【重试】，无需重启 App。
+
+**启动自检（已移除，仅作历史记录）**  
+曾用「数据库自检」弹窗列出车辆/租约条数，以及 `doc:`（`_doc` 里的 db / journal）、`Download:`（公共 Download 是否有 db）、`已导入:`（来源路径）；完整结构输出到控制台 `DB诊断`，并提供【重新导入】按钮。该弹窗与相关函数已于 2026-10-30 删除，见下方「精简」。
+
+旧的「直接覆盖 `_doc`」方式仍可用，但需：先在后台彻底划掉 App → 删除同目录的 `car_management.db-journal` → 再覆盖 → 重启。
+
+**2026-10-30 精简**  
+SAF 导入 / 导出走通后，移除调试用的启动自检弹窗与【重新导入】按钮（`showDbSelfCheck`、`findDir`/`describeDir`/`fmtSize`、`reimportDb`、`diagnoseDb`、`listDir`、`importDbFromDownloadNow` 均已删除）；启动只保留失败弹窗。同时删除 `static/car_management.db` 与包内 `static` 导入通道（`DB_BUNDLED_CANDIDATES`），安装包不再携带数据库。`Download` 自动导入通道与 `-1404` 三级自愈仍保留。
+
+**附带修复：空库不再显示模拟数据**  
+`pages/index/index.vue` 在查询结果为空时会填充「大众朗逸 / 丰田凯美瑞」两条假车辆，造成「自检 0 辆、列表却有车」的误判，已改为空列表（加载失败时同样为空）。
+
+**涉及**  
+`utils/db.js`、`App.vue`
+
+---
+
+## 2026-10-30 — 用户侧的库导入 / 导出（不依赖存储权限）
+
+**背景**  
+最终用户的库在 App 私有目录 `_doc`，普通用户拿不出来；把 db 放进公共 Download 又受 Android 11 分区存储限制（App 读不到 `.db` 这类非媒体文件），标准基座也无法申请「所有文件访问权限」。因此改为 **App 内自己选文件、自己写盘**。
+
+**导入（`pages/data/import-db.vue` + `static/db-import.html`）**  
+- 页面用 `<web-view src="/static/db-import.html">` 承载本地 HTML；  
+- H5 里 `<input type="file" accept="*/*">` 调起系统文件选择器（SAF，无需权限），`FileReader.readAsDataURL` 读成 base64；  
+- 按 20 万字符分片 `uni.postMessage({ type:'db-chunk', seq, total, data })`，桥接脚本为 `static/uni.webview.1.5.2.js`；  
+- `import-db.vue` 收齐分片后调用 `importDbFromBase64()`：关库 → `FileWriter.writeAsBinary` 写 `_doc/car_management_import.db` → `replaceDocDbFile` 替换 → `initDb(true)` 重开（`skipImport` 避免被包内 static 覆盖）；  
+- 单文件上限 8MB。
+
+**导出（`pages/data/data.vue` → `exportDbToDownload()`）**  
+- 关库 → 读 `_doc/car_management.db` 为 base64 → 用 `MediaStore`（`content://media/external/downloads`）写入公共 Download，文件名 `car_management_YYYYMMDD_HHmm.db`；  
+- Android 10+ 走 MediaStore 无需存储权限，低于 10 直接提示不支持；  
+- 成功或失败都会重新 `initDb(true)`，避免页面停留在「数据库未初始化」。
+
+**导出报 `resolver insert is not a function`**  
+`getContentResolver()`、`openOutputStream()` 返回的是 5+ 原始 Java 对象，**不会**像 `importClass` 导入的类那样把方法挂到 JS 对象上，直接 `.insert()` / `.write()` 必然报 “not a function”。改为：`ContentResolver`、`OutputStream` 上的方法一律用 `plus.android.invoke(obj, '方法名', ...参数)`（`getContentResolver`、`insert`、`openOutputStream`、`write`/`flush`/`close`）；`ContentValues` 用 `plus.android.newObject('android.content.ContentValues')` 创建，字段用 `invoke(values, 'put', ...)`；版本判断用 `parseInt(plus.os.version, 10)` 与 10 比较；`Base64.decode(base64, 0)`（`DEFAULT = 0`），并补 `openOutputStream` 返回空的判断。
+
+**入口**  
+`pages/index/index.vue` 搜索栏右侧新增「⋯」按钮 → `pages/data/data`，显示当前车辆/租约条数，提供导出、导入两个操作。
+
+**注意**  
+`static/car_management.db` 只是首次灌数据的临时文件（按指纹去重），数据已进 `_doc` 后应删除，否则该文件一变化，启动时会再覆盖一次。
+
+---
+
 ## 说明
 
 - 真机需勾选 **manifest → App 模块 → SQLite**，并使用含该模块的自定义基座或正式包。  

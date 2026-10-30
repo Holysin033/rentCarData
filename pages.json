@@ -77,6 +77,18 @@
 			"style": {
 				"navigationBarTitleText": "统计报表"
 			}
+		},
+		{
+			"path": "pages/data/data",
+			"style": {
+				"navigationBarTitleText": "数据管理"
+			}
+		},
+		{
+			"path": "pages/data/import-db",
+			"style": {
+				"navigationBarTitleText": "选择数据库文件"
+			}
 		}
 	],
 	"globalStyle": {

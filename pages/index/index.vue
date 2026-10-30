@@ -12,6 +12,9 @@
 					@input="handleSearch"
 				/>
 			</view>
+			<view class="header-action" @click="openDataPage">
+				<text class="header-action-icon">⋯</text>
+			</view>
 		</view>
 		<view class="car-list">
 			<view v-for="item in filteredCarList" :key="item.id" class="car-item">
@@ -77,55 +80,15 @@ export default {
 			// db.js会自动处理浏览器环境（IndexedDB）和App环境（plus.sqlite）
 			const sql = `SELECT * FROM car ORDER BY id DESC`;
 			query(sql).then(res => {
-				const list = res || [];
-				if (list.length === 0) {
-					// 如果数据库中没有数据，使用模拟数据
-					this.carList = [
-						{
-							id: 1,
-							name: '大众朗逸',
-							carNumber: '京A12345',
-							imagePath: '',
-							latestMaintenance: '2026-03-15',
-							latestInsurance: '2026-12-31'
-						},
-						{
-							id: 2,
-							name: '丰田凯美瑞',
-							carNumber: '京B67890',
-							imagePath: '',
-							latestMaintenance: '2026-02-20',
-							latestInsurance: '2026-11-30'
-						}
-					];
-					return;
-				}
-				this.carList = list.map(car => Object.assign({}, car, {
+				// 空库就显示空列表：早期填充的模拟数据会让人误以为数据还在
+				this.carList = (res || []).map(car => Object.assign({}, car, {
 					latestMaintenance: '无',
 					latestInsurance: '无'
 				}));
 				this.fillLatestDates();
 			}).catch(err => {
 				console.error('加载车辆列表失败:', err);
-				// 加载失败时使用模拟数据
-				this.carList = [
-					{
-						id: 1,
-						name: '大众朗逸',
-						carNumber: '京A12345',
-						imagePath: '',
-						latestMaintenance: '2026-03-15',
-						latestInsurance: '2026-12-31'
-					},
-					{
-						id: 2,
-						name: '丰田凯美瑞',
-						carNumber: '京B67890',
-						imagePath: '',
-						latestMaintenance: '2026-02-20',
-						latestInsurance: '2026-11-30'
-					}
-				];
+				this.carList = [];
 			});
 		},
 		/**
@@ -166,6 +129,11 @@ export default {
 			// 跳转到添加车辆页面
 			uni.navigateTo({
 				url: './add-car'
+			});
+		},
+		openDataPage() {
+			uni.navigateTo({
+				url: '../data/data'
 			});
 		},
 		editCar(item) {
@@ -240,6 +208,26 @@ export default {
 	border: 1rpx solid rgba(0, 122, 255, 0.14);
 	box-shadow: 0 4rpx 20rpx rgba(0, 0, 0, 0.05);
 	gap: 12rpx;
+}
+
+.header-action {
+	flex: none;
+	width: 72rpx;
+	height: 72rpx;
+	margin-left: 16rpx;
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	background: #ffffff;
+	border-radius: 999rpx;
+	border: 1rpx solid rgba(0, 122, 255, 0.14);
+	box-shadow: 0 4rpx 20rpx rgba(0, 0, 0, 0.05);
+}
+
+.header-action-icon {
+	font-size: 34rpx;
+	line-height: 1;
+	color: #007AFF;
 }
 
 .search-icon {
